@@ -8,10 +8,12 @@ It will retrieve and sync the following information for each public repo:
 - wiki if available
 
 ## Prerequisites
-- `GITHUB_TOKEN`: the user's GitHub token (to allow higher rate limit)
+- `GITHUB_TOKEN`: the user's GitHub token
 - `GITLAB_URL`: the target GitLab instance
 - `GITLAB_TOKEN`: the user's token in the target GitLab instance
 - `STORAGE_URL`: the [dufs](https://github.com/sigoden/dufs) instance url
+
+All urls should **NOT** end with a slash (/).
 
 Install packages:
 

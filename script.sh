@@ -107,16 +107,19 @@ function upload_asset() {
     tag_name=$2
     asset_name=$3
 
-    # Upload to Cold Storage
-    asset_url="${STORAGE_URL}/gitlab/projects/prj_${project_id}/tag_${tag_name}/${asset_name}"
+    # Upload to storage
+    asset_url="${STORAGE_URL}/gitlab/projects/prj_${project_id}/tag_${tag_name//\//-}/${asset_name//\//-}"
     curl -T "./$asset_name" "$asset_url"
+
+    # Encoe tag name
+    encoded_tag_name=$(printf '%s' "$tag_name" | jq -sRr @uri)
 
     variable_response_body=$(mktemp)
     # Link the asset to the release
     http_status=$(curl --silent --output "$variable_response_body" --write-out "%{http_code}" \
                         --request POST --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
                         --form "file=@$asset_name" \
-                        "$GITLAB_URL/api/v4/projects/$project_id/releases/$tag_name/assets/links?name=$asset_name&url=${asset_url}")
+                        "$GITLAB_URL/api/v4/projects/$project_id/releases/$encoded_tag_name/assets/links?name=$asset_name&url=${asset_url}")
 
     # Check if the response status code is not in the 2xx range
     if [[ $http_status -lt 200 || $http_status -ge 300 ]]; then
@@ -131,7 +134,7 @@ function upload_asset() {
     fi
 }
 
-# This function deletes an asset from Storage.
+# This function deletes an asset from storage.
 #
 # Usage: delete_asset $project_id $tag_name $asset_name
 # arg1 - The GitLab project id
@@ -144,8 +147,8 @@ function delete_asset() {
     tag_name=$2
     asset_name=$3
 
-    # Delete from Storage
-    curl -X DELETE "${STORAGE_URL}/gitlab/projects/prj_${project_id}/tag_${tag_name}/${asset_name}"
+    # Delete from storage
+    curl -X DELETE "${STORAGE_URL}/gitlab/projects/prj_${project_id}/tag_${tag_name//\//-}/${asset_name//\//-}}"
     return 0
 }
 
@@ -170,7 +173,7 @@ function sync_repo() {
     exists=$(curl -s --header "Private-Token: $GITLAB_TOKEN" "$GITLAB_URL/api/v4/groups/$gitlab_group_id/projects?search=$repo_name")    
     lowercase_repo_name=$(echo "$repo_name" | tr '[:upper:]' '[:lower:]')
     matching_project=$(echo "$exists" | jq --arg repo_name "$lowercase_repo_name" 'map(.name | ascii_downcase) | index($repo_name)')
-    
+
     if [ "$matching_project" == "null" ]; then
         mkdir -p "$repo_name"
         cd "$repo_name"
@@ -243,7 +246,7 @@ function sync_repo() {
 
     # Fetch GitHub releases
     echo "- Fetching GitHub releases..."
-    github_releases=$(curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/$github_username/$repo_name/releases?per_page=10")
+    github_releases=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" "https://api.github.com/repos/$github_username/$repo_name/releases?per_page=10")
     github_releases=$(echo $github_releases | jq '. | reverse') # reversed so the oldest are first
     echo "  - Found $(echo "$github_releases" | jq '. | length') releases"
 
@@ -286,7 +289,7 @@ function sync_repo() {
                 download_asset $asset_url $asset_name
 
                 # Upload the asset to GitLab
-                echo "      - Uploading asset to Storage and link to GitLab..."
+                echo "      - Uploading asset to storage and link to GitLab..."
                 upload_asset $project_id $tag_name $asset_name
                 rm -f "./$asset_name"
                 echo "      - Done"
@@ -297,7 +300,7 @@ function sync_repo() {
     done
 
     # Delete older releases' assets
-    echo "- Deleting older releases' assets from GitLab..."
+    echo "- Deleting older releases' assets from storage..."
     gitlab_releases=$(curl -s --header "Private-Token: $GITLAB_TOKEN" "$GITLAB_URL/api/v4/projects/$project_id/releases") # Fetch latest releases from GitLab
     total_gitlab_releases=$(echo "$gitlab_releases" | jq '. | length')
     gitlab_releases_to_process=$((total_gitlab_releases - 10))
@@ -315,7 +318,7 @@ function sync_repo() {
                 asset_name=$(echo "$asset" | jq -r '.name')
 
                 # Delete the asset using GitLab API
-                echo "    - Deleting asset $asset_name from Cold Storage"
+                echo "    - Deleting asset $asset_name from storage"
                 delete_asset $project_id $tag_name $asset_name
             done
         done
@@ -326,7 +329,7 @@ function sync_repo() {
 
     # Fetch GitHub wiki
     echo "- Fetching GitHub wiki..."
-    github_wiki_url="https://github.com/$github_username/$repo_name.wiki.git"
+    github_wiki_url="https://$GITHUB_TOKEN:x-oauth-basic@github.com/$github_username/$repo_name.wiki.git"
 
     project_path=$(echo "$project" | jq -r '.path_with_namespace')
     gitlab_wiki_url="$GITLAB_URL/${project_path}.wiki.git"
@@ -375,7 +378,7 @@ function sync_user() {
     count=1
     while : ; do
         # Get repositories from the GitHub API
-        response=$(curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/users/$github_username/repos?per_page=100&page=$page")
+        response=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" "https://api.github.com/users/$github_username/repos?per_page=100&page=$page")
         if [ "$(echo "$response" | jq '. | length')" -eq 0 ]; then
             break
         fi
@@ -398,7 +401,7 @@ function sync_user() {
                 continue
             fi
 
-            # if [ $count -le 6 ]; then
+            # if [ $count -le 41 ]; then
             #     echo "Skipping $count"
             #     ((count++))
             #     continue
@@ -418,4 +421,5 @@ function sync_user() {
 
 # $1 = GitHub username, $2 = GitLab group ID, $3 = Specific repositories separated by space
 sync_user "$1" "$2" "$3"
-exit 0
+exit 0;
+
