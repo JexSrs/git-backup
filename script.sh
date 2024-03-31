@@ -118,7 +118,6 @@ function upload_asset() {
     # Link the asset to the release
     http_status=$(curl --silent --output "$variable_response_body" --write-out "%{http_code}" \
                         --request POST --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
-                        --form "file=@$asset_name" \
                         "$GITLAB_URL/api/v4/projects/$project_id/releases/$encoded_tag_name/assets/links?name=$asset_name&url=${asset_url}")
 
     # Check if the response status code is not in the 2xx range
@@ -366,7 +365,9 @@ function sync_repo() {
 function sync_user() {
     github_username=$1
     gitlab_group_id=$2
-    IFS=' ' read -r -a specific_repositories <<< "$3"
+    IFS=',' read -r -a specific_repositories <<< "$3"
+    IFS=',' read -r -a exclude_repositories <<< "$4"
+    skip_repositories=$5
 
     sync_dir="./repo_sync"
     
@@ -394,18 +395,26 @@ function sync_user() {
                 continue
             fi
 
+            # Check if exclude_repositories is not empty and if repo_name is in exclude_repositories
+            if [ ${#exclude_repositories[@]} -ne 0 ] && [[ " ${exclude_repositories[@]} " =~ " ${repo_name} " ]]; then
+                echo "Skipping repository $repo_name as it's in the list of excluded repositories."
+                ((count++))
+                continue
+            fi
+
+            # Check if skip_repositories is not empty and if count is less than or equal to skip_repositories
+            if [ -n "$skip_repositories" ] && [ $count -le $skip_repositories ]; then
+                echo "Skipping repository $repo_name as it's in the list of skipped repositories by count"
+                ((count++))
+                continue
+            fi
+
             # Skip the repository if its name is .github
             if [ "$repo_name" == ".github" ]; then
                 echo "Skipping repository $repo_name"
                 ((count++))
                 continue
             fi
-
-            # if [ $count -le 41 ]; then
-            #     echo "Skipping $count"
-            #     ((count++))
-            #     continue
-            # fi
 
             sync_repo $count $github_username $gitlab_group_id $repo
             ((count++))
@@ -419,7 +428,32 @@ function sync_user() {
     rm -rf $sync_dir
 }
 
-# $1 = GitHub username, $2 = GitLab group ID, $3 = Specific repositories separated by space
-sync_user "$1" "$2" "$3"
-exit 0;
+# Initialize variables to store the values of the arguments
+_GITHUB_USERNAME=''
+_GITLAB_ID=''
+_INCLUDE_ONLY=''
+_EXCLUDE=''
+_SKIP=''
 
+# Extract options and their arguments into variables
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+        --github-username) _GITHUB_USERNAME="$2"; shift 2 ;;
+        --gitlab-id) _GITLAB_ID="$2"; shift 2 ;;
+        --include-only) _INCLUDE_ONLY="$2"; shift 2 ;;
+        --exclude) _EXCLUDE="$2"; shift 2 ;;
+        --skip) _SKIP="$2"; shift 2 ;;
+        --) shift; break ;;
+        *) echo "Unexpected option: $1"; exit 1 ;;
+    esac
+done
+
+echo "GitHub username: $_GITHUB_USERNAME"
+echo "GitLab group ID: $_GITLAB_ID"
+echo "Include only: $_INCLUDE_ONLY"
+echo "Exclude: $_EXCLUDE"
+echo "Skip: $_SKIP"
+
+# $1 = GitHub username, $2 = GitLab group ID, $3 = Specific repositories separated by comma, $4 = Exclude repositories separated by comma, $5 = Skip repositories number
+sync_user "$_GITHUB_USERNAME" "$_GITLAB_ID" "$_INCLUDE_ONLY" "$_EXCLUDE" "$_SKIP"
+exit 0;
