@@ -39,9 +39,9 @@ or clone specific repositories only:
 
 ```shell
 # Include specific repositories only
-./script.sh --github-username "BitWarden" --gitlab-id "418" --include-only "server clients"
+./script.sh --github-username "BitWarden" --gitlab-id "418" --include-only "server,clients"
 # Exlude specific repositories
-./script.sh --github-username "BitWarden" --gitlab-id "418" --exclude "server clients"
+./script.sh --github-username "BitWarden" --gitlab-id "418" --exclude "server,clients"
 # Skip first 10 repositories (ordered by name)
 ./script.sh --github-username "BitWarden" --gitlab-id "418" --skip 10
 ```
