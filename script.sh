@@ -42,7 +42,7 @@ function set_github_url() {
 # arg1 - The GitLab project id
 #
 # This function outputs the import progress directly to the standard output.
-# Returns 0 if the variable was set successfully, 1 otherwise.
+# Returns 0 if the import was successful, 1 otherwise.
 function lock_until_import() {
     project_id=$1
 
@@ -53,8 +53,11 @@ function lock_until_import() {
         # Check if the import_status is 'finished'
         if [ "$import_status" = "finished" ]; then
             import_finished=true
-            echo "  - Import finished successfully."
+            echo "  - Import finished successfully"
             break
+        elif [ "$import_status" = "failed" ]; then
+            echo "  - Current import status: $import_status"
+            return 1
         else
             echo "  - Current import status: $import_status"
             sleep 5
