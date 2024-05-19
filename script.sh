@@ -1,10 +1,74 @@
 #!/bin/bash
 set -e
 
+# Environment variables
 GITHUB_TOKEN=""
 GITLAB_URL=""
 GITLAB_TOKEN=""
 STORAGE_URL=""
+
+# Argument variables
+_GITHUB_USERNAME=''
+_GITLAB_ID=''
+_INCLUDE_ONLY=''
+_EXCLUDE=''
+_SKIP=''
+_EXLUDE_WIKI_FOR=''
+_INCLUDE_WIKI_FOR=''
+_EXLUDE_RELEASES_FOR=''
+_INCLUDE_RELEASES_FOR=''
+_EXLUDE_ASSETS_FOR=''
+_INCLUDE_ASSETS_FOR=''
+_ASSETS_THRESHOLD='5'
+_ASSETS_MAX_SIZE='1GB'
+
+
+# Extract options and their arguments into variables
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+        --github-username) _GITHUB_USERNAME="$2"; shift 2 ;;
+        --gitlab-id) _GITLAB_ID="$2"; shift 2 ;;
+        --include-only) _INCLUDE_ONLY="$2"; shift 2 ;;
+        --exclude) _EXCLUDE="$2"; shift 2 ;;
+        --skip) _SKIP="$2"; shift 2 ;;
+        --exclude-wiki-for) _EXLUDE_WIKI_FOR="$2"; shift 2 ;;
+        --include-wiki-only-for) _INCLUDE_WIKI_FOR="$2"; shift 2 ;;
+        --exclude-releases-for) _EXLUDE_RELEASES_FOR="$2"; shift 2 ;;
+        --inlclude-releases-only-for) _INCLUDE_RELEASES_FOR="$2"; shift 2 ;;
+        --exclude-assets-for) _EXLUDE_ASSETS_FOR="$2"; shift 2 ;;
+        --include-assets-only-for) _INCLUDE_ASSETS_FOR="$2"; shift 2 ;;
+        --delete-release-assets-threshold) _ASSETS_THRESHOLD="$2"; shift 2 ;;
+        --asset-max-size) _ASSETS_MAX_SIZE="$2"; shift 2 ;;
+        --) shift; break ;;
+        *) echo "Unexpected option: $1"; exit 1 ;;
+    esac
+done
+
+echo "GitHub username: $_GITHUB_USERNAME"
+echo "GitLab group ID: $_GITLAB_ID"
+echo "Include only: $_INCLUDE_ONLY"
+echo "Exclude: $_EXCLUDE"
+echo "Skip: $_SKIP"
+
+function convert_to_bytes() {
+    size_string=$1
+
+    # Extract the numeric part of the size string
+    size=$(echo $size_string | sed 's/[^0-9]//g')
+
+    # Extract the unit part of the size string
+    unit=$(echo $size_string | sed 's/[0-9]//g')
+
+    # Convert the size to bytes based on the unit
+    case $unit in
+        "KB") bytes=$(($size * 1024));;
+        "MB") bytes=$(($size * 1024 * 1024));;
+        "GB") bytes=$(($size * 1024 * 1024 * 1024));;
+        *) bytes=$size;; # Assume bytes if no unit is specified
+    esac
+
+    echo $bytes
+}
 
 # This function sets the original github url to a CI/CD variable in the GitLab repo.
 #
@@ -98,21 +162,19 @@ function download_asset() {
 
 # This function uploads an asset to Storage and links it to a GitLab release.
 #
-# Usage: upload_asset $project_id $tag_name $asset_name
+# Usage: create_asset $project_id $tag_name $asset_name $asset_url
 # arg1 - The GitLab project id
 # arg2 - The release tag name
 # arg3 - The asset name
+# arg4 - The asset URL
 #
 # This function outputs any errors directly to the standard output.
 # Returns 0 if the variable was set successfully, 1 otherwise.
-function upload_asset() {
+function create_asset() {
     project_id=$1
     tag_name=$2
     asset_name=$3
-
-    # Upload to storage
-    asset_url="${STORAGE_URL}/gitlab/projects/prj_${project_id}/tag_${tag_name//\//-}/${asset_name//\//-}"
-    curl -T "./$asset_name" "$asset_url"
+    asset_url=$4
 
     # Encoe tag name
     encoded_tag_name=$(printf '%s' "$tag_name" | jq -sRr @uri)
@@ -138,27 +200,26 @@ function upload_asset() {
 
 # This function deletes an asset from storage.
 #
-# Usage: delete_asset $project_id $tag_name $asset_name
+# Usage: delete_assets $project_id $tag_name
 # arg1 - The GitLab project id
 # arg2 - The release tag name
-# arg3 - The asset name
 #
 # Returns 0
-function delete_asset() {
+function delete_assets() {
     project_id=$1
     tag_name=$2
-    asset_name=$3
 
     # Delete from storage
-    curl -X DELETE "${STORAGE_URL}/gitlab/projects/prj_${project_id}/tag_${tag_name//\//-}/${asset_name//\//-}}"
+    curl -X DELETE "${STORAGE_URL}/gitlab/projects/prj_${project_id}/tag_${tag_name//\//-}"
     return 0
 }
 
 function sync_repo() {
     count=$1
-    github_username=$2
-    gitlab_group_id=$3
-    repo=$4
+    repo=$2
+    sync_wiki=$3
+    sync_releases=$4
+    sync_assets=$5
 
     jq_repo() {
         echo ${repo} | base64 --decode | jq -r "${1}"
@@ -172,19 +233,19 @@ function sync_repo() {
     echo "$count. Evaluating GitHub repository '$repo_name'"
 
     # Check if repo exists in GitLab group
-    exists=$(curl -s --header "Private-Token: $GITLAB_TOKEN" "$GITLAB_URL/api/v4/groups/$gitlab_group_id/projects?search=$repo_name")    
+    exists=$(curl -s --header "Private-Token: $GITLAB_TOKEN" "$GITLAB_URL/api/v4/groups/$_GITLAB_ID/projects?search=$repo_name")    
     lowercase_repo_name=$(echo "$repo_name" | tr '[:upper:]' '[:lower:]')
     matching_project=$(echo "$exists" | jq --arg repo_name "$lowercase_repo_name" 'map(.name | ascii_downcase) | index($repo_name)')
 
     if [ "$matching_project" == "null" ]; then
-        mkdir -p "$repo_name"
+        mkdir "$repo_name"
         cd "$repo_name"
 
         echo "- Importing new repository in GitLab..."
         # Create a project
         project=$(curl -s --request POST --header "Private-Token: $GITLAB_TOKEN" \
             --data "name=${repo_name#.}" \
-            --data "namespace_id=$gitlab_group_id" \
+            --data "namespace_id=$_GITLAB_ID" \
             --data "import_url=$repo_url" \
             --data-urlencode "description=$repo_description" \
             "$GITLAB_URL/api/v4/projects")
@@ -212,7 +273,7 @@ function sync_repo() {
                 "$GITLAB_URL/api/v4/projects/$project_id/protected_branches/$encoded_branch" 2>&1 | sed 's/^/"      /'
         done
     else
-        echo "- Repository $repo_name already exists in GitLab group $gitlab_group_id"
+        echo "- Repository $repo_name already exists in GitLab group $_GITLAB_ID"
         project=$(echo "$exists" | jq ".[$matching_project]")
         project_id=$(echo "$project" | jq -r '.id')
         gitlab_repo_http_url=$(echo "$project" | jq -r '.http_url_to_repo')
@@ -247,133 +308,154 @@ function sync_repo() {
     fi
 
     # Fetch GitHub releases
-    echo "- Fetching GitHub releases..."
-    github_releases=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" "https://api.github.com/repos/$github_username/$repo_name/releases?per_page=10")
-    github_releases=$(echo $github_releases | jq '. | reverse') # reversed so the oldest are first
-    echo "  - Found $(echo "$github_releases" | jq '. | length') releases"
+    if [ "$sync_releases" == true ]; then
+        echo "- Fetching GitHub releases..."
+        github_releases=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" "https://api.github.com/repos/$_GITHUB_USERNAME/$repo_name/releases?per_page=10")
+        github_releases=$(echo $github_releases | jq '. | reverse') # reversed so the oldest are first
+        echo "  - Found $(echo "$github_releases" | jq '. | length') releases"
 
-    for release in $(echo "$github_releases" | jq -r '.[] | @base64'); do
-        jq_release() {
-            echo ${release} | base64 --decode | jq -r "${1}"
-        }
+        for release in $(echo "$github_releases" | jq -r '.[] | @base64'); do
+            jq_release() {
+                echo ${release} | base64 --decode | jq -r "${1}"
+            }
 
-        tag_name=$(jq_release '.tag_name')
-        release_name=$(jq_release '.name')
-        release_description=$(jq_release '.body')
-        release_assets=$(jq_release '.assets | .[] | @base64')
-        release_created_at=$(jq_release '.created_at')
+            tag_name=$(jq_release '.tag_name')
+            release_name=$(jq_release '.name')
+            release_description=$(jq_release '.body')
+            release_assets=$(jq_release '.assets | .[] | @base64')
+            release_created_at=$(jq_release '.created_at')
 
-        echo "  - Evaluating release $tag_name..."
+            echo "  - Evaluating release $tag_name..."
 
-        gitlab_release=$(curl -s --header "Private-Token: $GITLAB_TOKEN" "$GITLAB_URL/api/v4/projects/$project_id/releases/$tag_name")
-        if [[ "$gitlab_release" == *"404 Not Found"* ]]; then
-            echo "    - Release $tag_name does not exist, creating..."
+            gitlab_release=$(curl -s --header "Private-Token: $GITLAB_TOKEN" "$GITLAB_URL/api/v4/projects/$project_id/releases/$tag_name")
+            if [[ "$gitlab_release" == *"404 Not Found"* ]]; then
+                echo "    - Release $tag_name does not exist, creating..."
 
-            gitlab_release=$(curl -s --request POST --header "Private-Token: $GITLAB_TOKEN" \
-                --data-urlencode "name=$release_name" \
-                --data-urlencode "tag_name=$tag_name" \
-                --data-urlencode "description=$release_description" \
-                --data-urlencode "released_at=$release_created_at" \
-                "$GITLAB_URL/api/v4/projects/$project_id/releases")
-            
-            assets_count=$(echo ${release} | base64 --decode | jq '.assets | length')
-            echo "    - Found $assets_count assets"
-            for asset in $release_assets; do
-                jq_asset() {
-                    echo ${asset} | base64 --decode | jq -r ${1}
-                }
+                gitlab_release=$(curl -s --request POST --header "Private-Token: $GITLAB_TOKEN" \
+                    --data-urlencode "name=$release_name" \
+                    --data-urlencode "tag_name=$tag_name" \
+                    --data-urlencode "description=$release_description" \
+                    --data-urlencode "released_at=$release_created_at" \
+                    "$GITLAB_URL/api/v4/projects/$project_id/releases")
+                
+                # Sync assets
+                assets_count=$(echo ${release} | base64 --decode | jq '.assets | length')
+                echo "    - Found $assets_count assets"
+                for asset in $release_assets; do
+                    jq_asset() {
+                        echo ${asset} | base64 --decode | jq -r ${1}
+                    }
 
-                asset_name=$(jq_asset '.name')
-                asset_url=$(jq_asset '.browser_download_url')
+                    asset_name=$(jq_asset '.name')
+                    asset_url=$(jq_asset '.browser_download_url')
 
-                # Download the asset
-                echo "    - Downloading asset: $asset_name"
-                download_asset $asset_url $asset_name
+                    if [[ "$sync_assets" == true ]]; then
+                        # Download the asset
+                        echo "    - Downloading asset: $asset_name"
+                        download_asset $asset_url $asset_name
 
-                # Upload the asset to GitLab
-                echo "      - Uploading asset to storage and link to GitLab..."
-                upload_asset $project_id $tag_name $asset_name
-                rm -f "./$asset_name"
-                echo "      - Done"
-            done
-        else
-            echo "    - Release $tag_name already exists in GitLab"
-        fi
-    done
+                        # Check if the asset exceeds the maximum size
+                        if [ "$_ASSETS_MAX_SIZE" != "none" ]; then
+                            size=$(stat -f %z $asset_name)
+                            echo "      - Size: $size"
+                            bytes=$(convert_to_bytes $_ASSETS_MAX_SIZE)
 
-    # Delete older releases' assets
-    echo "- Deleting older releases' assets from storage..."
-    gitlab_releases=$(curl -s --header "Private-Token: $GITLAB_TOKEN" "$GITLAB_URL/api/v4/projects/$project_id/releases") # Fetch latest releases from GitLab
-    total_gitlab_releases=$(echo "$gitlab_releases" | jq '. | length')
-    gitlab_releases_to_process=$((total_gitlab_releases - 10))
-
-    # Check if there are releases to process
-    if [ $gitlab_releases_to_process -gt 0 ]; then
-        echo "  - Processing $gitlab_releases_to_process releases for asset deletion"
-        for release_index in $(seq 0 $((gitlab_releases_to_process - 1))); do
-            release=$(echo "$all_releases" | jq ".[$release_index]")
-            tag_name=$(echo "$release" | jq -r '.tag_name')
-            echo "  - Processing release $tag_name for asset deletion"
-        
-            assets=$(echo "$release" | jq -r '.assets.links[]?')
-            for asset in $assets; do
-                asset_name=$(echo "$asset" | jq -r '.name')
-
-                # Delete the asset using GitLab API
-                echo "    - Deleting asset $asset_name from storage"
-                delete_asset $project_id $tag_name $asset_name
-            done
+                            if [ $size -gt $bytes ]; then
+                                echo "      - Asset $asset_name exceeds the maximum size of $_ASSETS_MAX_SIZE"
+                                rm -f "./$asset_name"
+                            else
+                                # Upload the asset to dufs
+                                echo "      - Uploading asset to storage and link to GitLab..."
+                                asset_url="${STORAGE_URL}/gitlab/projects/prj_${project_id}/tag_${tag_name//\//-}/${asset_name//\//-}"
+                                curl -T "./$asset_name" "$asset_url"
+                            fi
+                        fi
+                    fi
+                    
+                    # Link to GitLab (either with dufs or GitHub URL)
+                    create_asset $project_id $tag_name $asset_name $asset_url
+                    rm -f "./$asset_name"
+                    echo "      - Done"
+                done
+            else
+                echo "    - Release $tag_name already exists in GitLab"
+            fi
         done
+
+        # Delete older releases' assets
+        if [ "$_ASSETS_THRESHOLD" != "none" ]; then
+            echo "- Checking older releases' assets to delete from storage..."
+            gitlab_releases=$(curl -s --header "Private-Token: $GITLAB_TOKEN" "$GITLAB_URL/api/v4/projects/$project_id/releases") # Fetch latest releases from GitLab
+            total_gitlab_releases=$(echo "$gitlab_releases" | jq '. | length')
+            gitlab_releases_to_process=$((total_gitlab_releases - _ASSETS_THRESHOLD))
+
+            # Check if there are releases to process
+            if [ $gitlab_releases_to_process -gt 0 ]; then
+                echo "  - Processing $gitlab_releases_to_process releases for asset deletion"
+                for release_index in $(seq 0 $((gitlab_releases_to_process - 1))); do
+                    release=$(echo "$gitlab_releases" | jq ".[$release_index]")
+                    tag_name=$(echo "$release" | jq -r '.tag_name')
+
+                    # Delete assets from storage
+                    echo "  - Deleting assets for release $tag_name from storage"
+                    delete_assets $project_id $tag_name
+                done
+            fi
+        fi
     fi
 
     cd ..
     rm -rf "./$repo_name"
 
     # Fetch GitHub wiki
-    echo "- Fetching GitHub wiki..."
-    github_wiki_url="https://$GITHUB_TOKEN:x-oauth-basic@github.com/$github_username/$repo_name.wiki.git"
+    if [ "$sync_wiki" == true ]; then
+        echo "- Checking for GitHub wiki..."
+        github_wiki_url="https://$GITHUB_TOKEN:x-oauth-basic@github.com/$_GITHUB_USERNAME/$repo_name.wiki.git"
 
-    project_path=$(echo "$project" | jq -r '.path_with_namespace')
-    gitlab_wiki_url="$GITLAB_URL/${project_path}.wiki.git"
-    gitlab_wiki_url_with_token=$(echo "$gitlab_wiki_url" | sed -E "s|(https?)://|\1://oauth2:$GITLAB_TOKEN@|")
+        project_path=$(echo "$project" | jq -r '.path_with_namespace')
+        gitlab_wiki_url="$GITLAB_URL/${project_path}.wiki.git"
+        gitlab_wiki_url_with_token=$(echo "$gitlab_wiki_url" | sed -E "s|(https?)://|\1://oauth2:$GITLAB_TOKEN@|")
 
-    if git ls-remote "$github_wiki_url" &> /dev/null; then
-        echo "  - Found GitHub Wiki, syncing..."
-        git clone "$github_wiki_url" "${repo_name}_wiki" 2>&1 | sed 's/^/      /'
-        cd "${repo_name}_wiki"
+        if git ls-remote "$github_wiki_url" &> /dev/null; then
+            echo "  - Found GitHub Wiki, syncing..."
+            git clone "$github_wiki_url" "${repo_name}_wiki" 2>&1 | sed 's/^/      /'
+            cd "${repo_name}_wiki"
 
-        # Push to GitLab Wiki
-        git remote add gitlab "$gitlab_wiki_url_with_token"
+            # Push to GitLab Wiki
+            git remote add gitlab "$gitlab_wiki_url_with_token"
 
-        echo "  - Pushing branches to GitLab..."
-        branches=$(git branch --list | sed 's/^\*//g' | sed 's/^[ \t]*//')
-        echo "    - Found ${#branches[@]} branches"
-        for branch in "${branches[@]}"; do
-            echo "  - Pushing $branch..."
-            git push gitlab "$branch" --force 2>&1 | sed 's/^/        /'
-            # Check if the push was successful
-            if [ $? -ne 0 ]; then
-                return 1
-            fi
-        done
+            echo "  - Pushing branches to GitLab..."
+            branches=$(git branch --list | sed 's/^\*//g' | sed 's/^[ \t]*//')
+            echo "    - Found ${#branches[@]} branches"
+            for branch in "${branches[@]}"; do
+                echo "  - Pushing $branch..."
+                git push gitlab "$branch" --force 2>&1 | sed 's/^/        /'
+                # Check if the push was successful
+                if [ $? -ne 0 ]; then
+                    return 1
+                fi
+            done
 
-        cd ..
-        rm -rf "./${repo_name}_wiki"
+            cd ..
+            rm -rf "./${repo_name}_wiki"
+        fi
     fi
 
-    sleep 2
     return 0
 }
 
 function sync_user() {
-    github_username=$1
-    gitlab_group_id=$2
-    IFS=',' read -r -a specific_repositories <<< "$3"
-    IFS=',' read -r -a exclude_repositories <<< "$4"
-    skip_repositories=$5
-
-    sync_dir="./repo_sync"
+    IFS=',' read -r -a repo_exlude <<< "$_EXCLUDE"
+    IFS=',' read -r -a repo_include_only <<< "$_INCLUDE_ONLY"
+    IFS=',' read -r -a repo_wiki_exlude <<< "$_EXLUDE_WIKI_FOR"
+    IFS=',' read -r -a repo_wiki_include_only <<< "$_INCLUDE_WIKI_FOR"
+    IFS=',' read -r -a repo_releases_exlude <<< "$_EXLUDE_RELEASES_FOR"
+    IFS=',' read -r -a repo_releases_include_only <<< "$_EXLUDE_RELEASES_FOR"
+    IFS=',' read -r -a repo_assets_exlude <<< "$_EXLUDE_ASSETS_FOR"
+    IFS=',' read -r -a repo_assets_include_only <<< "$_INCLUDE_ASSETS_FOR"
     
+    sync_dir="./tmp_$_GITHUB_USERNAME"
+
     rm -rf $sync_dir
     mkdir -p $sync_dir
     cd $sync_dir
@@ -382,7 +464,7 @@ function sync_user() {
     count=1
     while : ; do
         # Get repositories from the GitHub API
-        response=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" "https://api.github.com/users/$github_username/repos?per_page=100&page=$page")
+        response=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" "https://api.github.com/users/$_GITHUB_USERNAME/repos?per_page=100&page=$page")
         if [ "$(echo "$response" | jq '. | length')" -eq 0 ]; then
             break
         fi
@@ -391,36 +473,59 @@ function sync_user() {
         for repo in $(echo "$response" | jq -r '.[] | @base64'); do
             repo_name=$(echo "$repo" | base64 --decode | jq -r '.name')
 
-            # Check if specific_repositories is not empty and if repo_name is not in specific_repositories
-            if [ ${#specific_repositories[@]} -ne 0 ] && ! [[ " ${specific_repositories[@]} " =~ " ${repo_name} " ]]; then
-                echo "Skipping repository $repo_name as it's not in the list of specific repositories."
-                ((count++))
+            # Skip the repository if its name is .github
+            if [ "$repo_name" == ".github" ]; then
+                echo "Skipping repository $repo_name"
                 continue
             fi
 
-            # Check if exclude_repositories is not empty and if repo_name is in exclude_repositories
-            if [ ${#exclude_repositories[@]} -ne 0 ] && [[ " ${exclude_repositories[@]} " =~ " ${repo_name} " ]]; then
-                echo "Skipping repository $repo_name as it's in the list of excluded repositories."
-                ((count++))
-                continue
-            fi
-
-            # Check if skip_repositories is not empty and if count is less than or equal to skip_repositories
-            if [ -n "$skip_repositories" ] && [ $count -le $skip_repositories ]; then
+            # Check if _SKIP is not empty and if count is less than or equal to _SKIP
+            if [ -n "$_SKIP" ] && [ $count -le $_SKIP ]; then
                 echo "Skipping repository $repo_name as it's in the list of skipped repositories by count"
                 ((count++))
                 continue
             fi
 
-            # Skip the repository if its name is .github
-            if [ "$repo_name" == ".github" ]; then
-                echo "Skipping repository $repo_name"
-                ((count++))
+            # Check if repo_include_only is not empty and if repo_name is not in repo_include_only
+            if [ ${#repo_include_only[@]} -ne 0 ] && ! [[ " ${repo_include_only[@]} " =~ " ${repo_name} " ]]; then
+                echo "Skipping repository $repo_name as it's not in the list of specific repositories."
+                continue
+            fi
+            
+            # Check if repo_exlude is not empty and if repo_name is in repo_exlude
+            if [ ${#repo_exlude[@]} -ne 0 ] && [[ " ${repo_exlude[@]} " =~ " ${repo_name} " ]]; then
+                echo "Skipping repository $repo_name as it's in the list of excluded repositories."
                 continue
             fi
 
-            sync_repo $count $github_username $gitlab_group_id $repo
+            sync_wiki=true
+            sync_releases=true
+            sync_assets=true
+
+            # Check if repo_wiki_include_only is not empty and if repo_name is not in repo_wiki_include_only
+            # Check if repo_wiki_exlude is not empty and if repo_name is in repo_wiki_exlude
+            if { [ ${#repo_wiki_include_only[@]} -ne 0 ] && ! [[ " ${repo_wiki_include_only[@]} " =~ " ${repo_name} " ]]; } ||
+                { [ ${#repo_wiki_exclude[@]} -ne 0 ] && [[ " ${repo_wiki_exclude[@]} " =~ " ${repo_name} " ]]; }; then
+                sync_wiki=false
+            fi
+
+            # Check if repo_releases_include_only is not empty and if repo_name is not in repo_releases_include_only
+            # Check if repo_releases_exlude is not empty and if repo_name is in repo_releases_exlude
+            if { [ ${#repo_releases_include_only[@]} -ne 0 ] && ! [[ " ${repo_releases_include_only[@]} " =~ " ${repo_name} " ]]; } ||
+                { [ ${#repo_releases_exlude[@]} -ne 0 ] && [[ " ${repo_releases_exlude[@]} " =~ " ${repo_name} " ]]; }; then
+                sync_releases=false
+            fi
+
+            # Check if repo_assets_include_only is not empty and if repo_name is not in repo_assets_include_only
+            # Check if repo_assets_exlude is not empty and if repo_name is in repo_assets_exlude
+            if { [ ${#repo_assets_include_only[@]} -ne 0 ] && ! [[ " ${repo_assets_include_only[@]} " =~ " ${repo_name} " ]]; } ||
+                { [ ${#repo_assets_exlude[@]} -ne 0 ] && [[ " ${repo_assets_exlude[@]} " =~ " ${repo_name} " ]]; }; then
+                sync_assets=false
+            fi
+
+            sync_repo $count $repo $sync_wiki $sync_releases $sync_assets
             ((count++))
+            sleep 2
         done
 
         # Move to the next page
@@ -431,32 +536,5 @@ function sync_user() {
     rm -rf $sync_dir
 }
 
-# Initialize variables to store the values of the arguments
-_GITHUB_USERNAME=''
-_GITLAB_ID=''
-_INCLUDE_ONLY=''
-_EXCLUDE=''
-_SKIP=''
-
-# Extract options and their arguments into variables
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-        --github-username) _GITHUB_USERNAME="$2"; shift 2 ;;
-        --gitlab-id) _GITLAB_ID="$2"; shift 2 ;;
-        --include-only) _INCLUDE_ONLY="$2"; shift 2 ;;
-        --exclude) _EXCLUDE="$2"; shift 2 ;;
-        --skip) _SKIP="$2"; shift 2 ;;
-        --) shift; break ;;
-        *) echo "Unexpected option: $1"; exit 1 ;;
-    esac
-done
-
-echo "GitHub username: $_GITHUB_USERNAME"
-echo "GitLab group ID: $_GITLAB_ID"
-echo "Include only: $_INCLUDE_ONLY"
-echo "Exclude: $_EXCLUDE"
-echo "Skip: $_SKIP"
-
-# $1 = GitHub username, $2 = GitLab group ID, $3 = Specific repositories separated by comma, $4 = Exclude repositories separated by comma, $5 = Skip repositories number
-sync_user "$_GITHUB_USERNAME" "$_GITLAB_ID" "$_INCLUDE_ONLY" "$_EXCLUDE" "$_SKIP"
+sync_user;
 exit 0;
