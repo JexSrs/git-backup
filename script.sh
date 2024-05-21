@@ -50,6 +50,8 @@ echo "Include only: $_INCLUDE_ONLY"
 echo "Exclude: $_EXCLUDE"
 echo "Skip: $_SKIP"
 
+reserved_repo_names=(".github", "badges", "blame", "blob", "builds", "commits", "create", "create_dir", "edit", "environments/folders", "files", "find_file", "gitlab-lfs/objects", "info/lfs/objects", "new", "preview", "raw", "refs", "tree", "update", "wikis")
+
 function convert_to_bytes() {
     size_string=$1
 
@@ -68,6 +70,26 @@ function convert_to_bytes() {
     esac
 
     echo $bytes
+}
+
+function convert_from_bytes() {
+    bytes=$1
+
+    if [ $bytes -lt 1024 ]; then
+        echo "${bytes}B"
+    elif [ $bytes -lt $((1024 * 1024)) ]; then
+        echo "$((bytes / 1024))KB"
+    elif [ $bytes -lt $((1024 * 1024 * 1024)) ]; then
+        size=$(echo "scale=1; $bytes/1024/1024" | bc)
+        # Remove trailing zeros and decimal point if precision is zero
+        size=$(echo $size | sed 's/\.0$//')
+        echo "${size}MB"
+    else
+        size=$(echo "scale=1; $bytes/1024/1024/1024" | bc)
+        # Remove trailing zeros and decimal point if precision is zero
+        size=$(echo $size | sed 's/\.0$//')
+        echo "${size}GB"
+    fi
 }
 
 # This function sets the original github url to a CI/CD variable in the GitLab repo.
@@ -210,7 +232,7 @@ function delete_assets() {
     tag_name=$2
 
     # Delete from storage
-    curl -X DELETE "${STORAGE_URL}/gitlab/projects/prj_${project_id}/tag_${tag_name//\//-}"
+    curl -X DELETE "${STORAGE_URL}/gitlab/projects/prj_${project_id}/tag_${tag_name//\//-}/" > /dev/null 2>&1
     return 0
 }
 
@@ -233,7 +255,7 @@ function sync_repo() {
     echo "$count. Evaluating GitHub repository '$repo_name'"
 
     # Check if repo exists in GitLab group
-    exists=$(curl -s --header "Private-Token: $GITLAB_TOKEN" "$GITLAB_URL/api/v4/groups/$_GITLAB_ID/projects?search=$repo_name")    
+    exists=$(curl -s --header "Private-Token: $GITLAB_TOKEN" "$GITLAB_URL/api/v4/groups/$_GITLAB_ID/projects?search=$repo_name&per_page=100")
     lowercase_repo_name=$(echo "$repo_name" | tr '[:upper:]' '[:lower:]')
     matching_project=$(echo "$exists" | jq --arg repo_name "$lowercase_repo_name" 'map(.name | ascii_downcase) | index($repo_name)')
 
@@ -327,7 +349,8 @@ function sync_repo() {
 
             echo "  - Evaluating release $tag_name..."
 
-            gitlab_release=$(curl -s --header "Private-Token: $GITLAB_TOKEN" "$GITLAB_URL/api/v4/projects/$project_id/releases/$tag_name")
+            tag_name_encoded=$(echo -n "$tag_name" | jq -sRr @uri)
+            gitlab_release=$(curl -s --header "Private-Token: $GITLAB_TOKEN" "$GITLAB_URL/api/v4/projects/$project_id/releases/$tag_name_encoded")
             if [[ "$gitlab_release" == *"404 Not Found"* ]]; then
                 echo "    - Release $tag_name does not exist, creating..."
 
@@ -357,7 +380,7 @@ function sync_repo() {
                         # Check if the asset exceeds the maximum size
                         if [ "$_ASSETS_MAX_SIZE" != "none" ]; then
                             size=$(stat -f %z $asset_name)
-                            echo "      - Size: $size"
+                            echo "      - Size: $(convert_from_bytes $size)"
                             bytes=$(convert_to_bytes $_ASSETS_MAX_SIZE)
 
                             if [ $size -gt $bytes ]; then
@@ -473,28 +496,30 @@ function sync_user() {
         for repo in $(echo "$response" | jq -r '.[] | @base64'); do
             repo_name=$(echo "$repo" | base64 --decode | jq -r '.name')
 
-            # Skip the repository if its name is .github
-            if [ "$repo_name" == ".github" ]; then
-                echo "Skipping repository $repo_name"
-                continue
-            fi
+            # Skip reserved names
+            for name in "${reserved_repo_names[@]}"; do
+                if [[ "$name" == "$repo_name" ]]; then
+                    echo "Skipping repository $repo_name: reserved name"
+                    break
+                fi
+            done
 
             # Check if _SKIP is not empty and if count is less than or equal to _SKIP
             if [ -n "$_SKIP" ] && [ $count -le $_SKIP ]; then
-                echo "Skipping repository $repo_name as it's in the list of skipped repositories by count"
+                echo "Skipping repository $repo_name: from --skip"
                 ((count++))
                 continue
             fi
 
             # Check if repo_include_only is not empty and if repo_name is not in repo_include_only
             if [ ${#repo_include_only[@]} -ne 0 ] && ! [[ " ${repo_include_only[@]} " =~ " ${repo_name} " ]]; then
-                echo "Skipping repository $repo_name as it's not in the list of specific repositories."
+                echo "Skipping repository $repo_name: from --include-only"
                 continue
             fi
             
             # Check if repo_exlude is not empty and if repo_name is in repo_exlude
             if [ ${#repo_exlude[@]} -ne 0 ] && [[ " ${repo_exlude[@]} " =~ " ${repo_name} " ]]; then
-                echo "Skipping repository $repo_name as it's in the list of excluded repositories."
+                echo "Skipping repository $repo_name: from --exclude"
                 continue
             fi
 
