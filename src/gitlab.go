@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	. "main/src/sources"
 	"net/http"
 	"net/url"
 )

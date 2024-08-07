@@ -7,7 +7,7 @@ import (
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
-	memory "github.com/go-git/go-git/v5/storage/memory"
+	"github.com/go-git/go-git/v5/storage/memory"
 	"main/src/sources"
 	"net/http"
 	"net/url"
@@ -25,12 +25,15 @@ type Project struct {
 	SourceRepository sources.SourceRepository
 
 	Repo *git.Repository
+	Wiki *Project
 }
 
 type ProjectGitLab struct {
-	ID            *int
-	HttpUrl       *string
-	ParentGroupID int
+	ID                *int    `json:"id"`
+	Name              string  `json:"name"`
+	HttpUrl           *string `json:"http_url_to_repo"`
+	PathWithNamespace *string `json:"path_with_namespace"`
+	ParentGroupID     int
 }
 
 func NewProject(gitlab *GitLab, groupId int, source sources.Source, username string, sourceRepository sources.SourceRepository) *Project {
@@ -54,11 +57,7 @@ func (g *Project) RetrieveExistingRepo() (int, error) {
 		return -1, err
 	}
 
-	var projects []struct {
-		ID            int    `json:"id"`
-		Name          string `json:"name"`
-		HttpUrlToRepo string `json:"http_url_to_repo"`
-	}
+	var projects []ProjectGitLab
 	err = json.Unmarshal(body, &projects)
 	if err != nil {
 		return -1, err
@@ -67,10 +66,11 @@ func (g *Project) RetrieveExistingRepo() (int, error) {
 	lowercaseRepoName := strings.ToLower(g.SourceRepository.Name)
 	for _, project := range projects {
 		if strings.ToLower(project.Name) == lowercaseRepoName {
-			g.DestinationRepository.ID = &project.ID
-			g.DestinationRepository.HttpUrl = &project.HttpUrlToRepo
+			g.DestinationRepository.ID = project.ID
+			g.DestinationRepository.HttpUrl = project.HttpUrl
+			g.DestinationRepository.PathWithNamespace = project.PathWithNamespace
 
-			return project.ID, nil
+			return *project.ID, nil
 		}
 	}
 
@@ -82,7 +82,10 @@ func (g *Project) Import() (int, error) {
 	data.Set("name", g.SourceRepository.Name)
 	data.Set("namespace_id", strconv.Itoa(g.DestinationRepository.ParentGroupID))
 	data.Set("import_url", g.SourceRepository.URL)
-	data.Set("description", g.SourceRepository.Description)
+
+	if g.SourceRepository.Description != nil {
+		data.Set("description", *g.SourceRepository.Description)
+	}
 
 	body, err := g.Destination.Request(http.MethodPost, "/api/v4/projects", []byte(data.Encode()))
 	if err != nil {
@@ -182,13 +185,13 @@ func (g *Project) CloneFromSource() error {
 	return nil
 }
 
-func (g *Project) LinkDestinationUrlToRepo() error {
+func (g *Project) AddRemoteToRepo() error {
 	if g.Repo == nil {
 		return fmt.Errorf("no repository found for project %d", g.DestinationRepository.ID)
 	}
 
 	// Create url
-	parsedURL, _ := url.Parse(g.Destination.URL.String())
+	parsedURL, _ := url.Parse(*g.DestinationRepository.HttpUrl)
 	parsedURL.User = url.UserPassword("oauth2", g.Destination.APIToken)
 
 	// Add a new remote, named "gitlab"
@@ -259,4 +262,24 @@ func (g *Project) PushAllTags() error {
 	}
 
 	return nil
+}
+
+func (g *Project) InitWikiProject() {
+	dstRepoUrl := fmt.Sprintf("%s/%s.wiki.git", g.Destination.URL.String(), *g.DestinationRepository.PathWithNamespace)
+
+	g.Wiki = &Project{
+		Destination: g.Destination,
+		DestinationRepository: &ProjectGitLab{
+			ID:            nil,
+			HttpUrl:       &dstRepoUrl,
+			ParentGroupID: -1,
+		},
+		SourceUsername: "",
+		Source:         g.Source,
+		SourceRepository: sources.SourceRepository{
+			Name:        fmt.Sprintf("%s.wiki", g.SourceRepository.Name),
+			URL:         g.Source.GetWikiURL(g.SourceUsername, g.SourceRepository.Name),
+			Description: nil,
+		},
+	}
 }

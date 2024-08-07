@@ -33,6 +33,7 @@ func SyncRepo(prj *Project) error {
 		return err
 	}
 
+	// Sync repository
 	if repoID == -1 {
 		fmt.Println("- Importing new repository in GitLab...")
 		repoID, err = prj.Import()
@@ -75,7 +76,7 @@ func SyncRepo(prj *Project) error {
 		}
 
 		fmt.Println("- Adding GitLab as a remote repository..")
-		if err := prj.LinkDestinationUrlToRepo(); err != nil {
+		if err := prj.AddRemoteToRepo(); err != nil {
 			return err
 		}
 
@@ -99,5 +100,36 @@ func SyncRepo(prj *Project) error {
 		}
 	}
 
+	// Sync WiKi
+	fmt.Println("- Checking for GitHub wiki...")
+	prj.InitWikiProject()
+	if err := prj.Wiki.CloneFromSource(); err == nil {
+		fmt.Println("  - Found GitHub Wiki, syncing...")
+		if err := prj.Wiki.AddRemoteToRepo(); err != nil {
+			return err
+		}
+
+		fmt.Println("  - Pushing branches to GitLab...")
+		branches, err := prj.Wiki.GetBranches()
+		if err != nil {
+			return err
+		}
+
+		fmt.Println(fmt.Sprintf("    - Found %d branches", len(branches)))
+		for _, branch := range branches {
+			fmt.Println(fmt.Sprintf("    - Pushing %s...", branch))
+			if err := prj.Wiki.PushBranch(branch); err != nil {
+				return err
+			}
+		}
+
+		fmt.Println("  - Pushing tags to GitLab...")
+		if err := prj.Wiki.PushAllTags(); err != nil {
+			return err
+		}
+	}
+
+	// Sync Releases
+	
 	return nil
 }

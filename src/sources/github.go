@@ -50,9 +50,9 @@ func (g *Github) Paginate(username string, page int) ([]SourceRepository, error)
 	// Convert maps to SourceRepository structs
 	repositories := make([]SourceRepository, 0)
 	for _, rawRepo := range rawRepos {
-		description := ""
+		var description *string
 		if str, ok := rawRepo["description"].(string); ok {
-			description = str
+			description = &str
 		}
 
 		repo := SourceRepository{
@@ -64,4 +64,8 @@ func (g *Github) Paginate(username string, page int) ([]SourceRepository, error)
 	}
 
 	return repositories, nil
+}
+
+func (g *Github) GetWikiURL(username, repoName string) string {
+	return fmt.Sprintf("https://%s:x-oauth-basic@github.com/%s/%s.wiki.git", g.Token, username, repoName)
 }
