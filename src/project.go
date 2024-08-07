@@ -3,6 +3,11 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/go-git/go-billy/v5/memfs"
+	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/config"
+	"github.com/go-git/go-git/v5/plumbing"
+	memory "github.com/go-git/go-git/v5/storage/memory"
 	"main/src/sources"
 	"net/http"
 	"net/url"
@@ -18,19 +23,28 @@ type Project struct {
 	Source           sources.Source
 	SourceUsername   string
 	SourceRepository sources.SourceRepository
+
+	Repo *git.Repository
 }
 
 type ProjectGitLab struct {
 	ID            *int
 	HttpUrl       *string
 	ParentGroupID int
-
-	IsImported bool
-	IsCloned   bool
 }
 
-func (g *Project) GetRepoPath() string {
-	return fmt.Sprintf("/tmp/git-backup/%s/%s", g.SourceUsername, g.SourceRepository.Name)
+func NewProject(gitlab *GitLab, groupId int, source sources.Source, username string, sourceRepository sources.SourceRepository) *Project {
+	return &Project{
+		Destination: gitlab,
+		DestinationRepository: &ProjectGitLab{
+			ID:            nil,
+			HttpUrl:       nil,
+			ParentGroupID: groupId,
+		},
+		SourceUsername:   username,
+		Source:           source,
+		SourceRepository: sourceRepository,
+	}
 }
 
 func (g *Project) RetrieveExistingRepo() (int, error) {
@@ -83,7 +97,6 @@ func (g *Project) Import() (int, error) {
 	}
 
 	g.DestinationRepository.ID = &result.ID
-	g.DestinationRepository.IsImported = true
 	return result.ID, nil
 }
 
@@ -157,26 +170,93 @@ func (g *Project) LinkAsset(tagName, assetName, assetUrl string) error {
 }
 
 func (g *Project) CloneFromSource() error {
-	err := g.Source.Clone(g.SourceRepository.URL, g.GetRepoPath())
+	r, err := git.Clone(memory.NewStorage(), memfs.New(), &git.CloneOptions{
+		URL: g.SourceRepository.URL,
+	})
+
 	if err != nil {
 		return err
 	}
 
-	g.DestinationRepository.IsCloned = true
+	g.Repo = r
 	return nil
 }
 
 func (g *Project) LinkDestinationUrlToRepo() error {
-	if !g.DestinationRepository.IsCloned {
-		return nil // just skip
+	if g.Repo == nil {
+		return fmt.Errorf("no repository found for project %d", g.DestinationRepository.ID)
 	}
 
 	// Create url
 	parsedURL, _ := url.Parse(g.Destination.URL.String())
 	parsedURL.User = url.UserPassword("oauth2", g.Destination.APIToken)
 
-	// Link it
-	path := g.GetRepoPath()
+	// Add a new remote, named "gitlab"
+	_, err := g.Repo.CreateRemote(&config.RemoteConfig{
+		Name: "gitlab",
+		URLs: []string{parsedURL.String()},
+	})
+	return err
+}
+
+func (g *Project) GetBranches() ([]string, error) {
+	if g.Repo == nil {
+		return nil, fmt.Errorf("no repository found for project %d", g.DestinationRepository.ID)
+	}
+
+	branches, err := g.Repo.Branches()
+	if err != nil {
+		return nil, err
+	}
+
+	names := make([]string, 0)
+	err = branches.ForEach(func(ref *plumbing.Reference) error {
+		names = append(names, ref.Name().String())
+		return nil
+	})
+	if err != nil {
+		fmt.Printf("Error iterating branches: %v\n", err)
+	}
+
+	return names, nil
+}
+
+func (g *Project) PushBranch(name string) error {
+	if g.Repo == nil {
+		return fmt.Errorf("no repository found for project %d", g.DestinationRepository.ID)
+	}
+
+	pushOptions := &git.PushOptions{
+		RemoteName: "gitlab",
+		RefSpecs: []config.RefSpec{
+			config.RefSpec("refs/heads/" + name + ":refs/heads/" + name),
+		},
+		Force: true,
+	}
+
+	// Perform the push
+	if err := g.Repo.Push(pushOptions); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (g *Project) PushAllTags() error {
+	if g.Repo == nil {
+		return fmt.Errorf("no repository found for project %d", g.DestinationRepository.ID)
+	}
+
+	pushOptions := &git.PushOptions{
+		RemoteName: "gitlab",
+		RefSpecs:   []config.RefSpec{"refs/tags/*:refs/tags/*"},
+		Force:      true,
+	}
+
+	// Perform the push
+	if err := g.Repo.Push(pushOptions); err != nil {
+		return err
+	}
 
 	return nil
 }

@@ -5,7 +5,7 @@ import (
 	"main/src/sources"
 )
 
-func SyncUser(username string, source sources.Source, groupId int) {
+func SyncUser(gitlab *GitLab, groupId int, source sources.Source, username string) {
 	pageNum := 0
 
 	results, err := source.Paginate(username, pageNum)
@@ -16,18 +16,7 @@ func SyncUser(username string, source sources.Source, groupId int) {
 		}
 
 		for _, result := range results {
-			prj := &Project{
-				Destination: _gitlab,
-				DestinationRepository: &ProjectGitLab{
-					ID:            nil,
-					HttpUrl:       nil,
-					ParentGroupID: groupId,
-				},
-				SourceUsername:   username,
-				Source:           source,
-				SourceRepository: result,
-			}
-
+			prj := NewProject(gitlab, groupId, source, username, result)
 			if err := SyncRepo(prj); err != nil {
 				fmt.Println(err)
 			}
@@ -36,7 +25,6 @@ func SyncUser(username string, source sources.Source, groupId int) {
 		pageNum++
 		results, err = source.Paginate(username, pageNum)
 	}
-
 }
 
 func SyncRepo(prj *Project) error {
@@ -86,6 +74,29 @@ func SyncRepo(prj *Project) error {
 			return err
 		}
 
+		fmt.Println("- Adding GitLab as a remote repository..")
+		if err := prj.LinkDestinationUrlToRepo(); err != nil {
+			return err
+		}
+
+		fmt.Println("- Pushing branches to GitLab...")
+		branches, err := prj.GetBranches()
+		if err != nil {
+			return err
+		}
+
+		fmt.Println(fmt.Sprintf("  - Found %d branches", len(branches)))
+		for _, branch := range branches {
+			fmt.Println(fmt.Sprintf("  - Pushing %s...", branch))
+			if err := prj.PushBranch(branch); err != nil {
+				return err
+			}
+		}
+
+		fmt.Println("- Pushing tags to GitLab...")
+		if err := prj.PushAllTags(); err != nil {
+			return err
+		}
 	}
 
 	return nil
