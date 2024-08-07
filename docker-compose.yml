@@ -1,0 +1,11 @@
+services:
+  container_name: gitbackup
+  hostname: gitbackup
+  image: gitbackup
+  build:
+    context: .
+    dockerfile: ./Dockerfile
+  restart: "no"
+  volumes:
+    - /tmp/git-backup:/tmp/git-backup
+    - ./config.json:/app/config.json
