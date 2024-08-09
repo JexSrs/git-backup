@@ -17,6 +17,8 @@ import (
 )
 
 type Project struct {
+	Config ConfigRepo
+
 	Destination           *GitLab
 	DestinationRepository *ProjectGitLab
 
@@ -25,7 +27,6 @@ type Project struct {
 	SourceRepository sources.SourceRepository
 
 	Repo *git.Repository
-	Wiki *Project
 }
 
 type ProjectGitLab struct {
@@ -36,7 +37,7 @@ type ProjectGitLab struct {
 	ParentGroupID     int
 }
 
-func NewProject(gitlab *GitLab, groupId int, source sources.Source, username string, sourceRepository sources.SourceRepository) *Project {
+func NewProject(gitlab *GitLab, groupId int, source sources.Source, username string, sourceRepository sources.SourceRepository, config ConfigRepo) *Project {
 	return &Project{
 		Destination: gitlab,
 		DestinationRepository: &ProjectGitLab{
@@ -47,18 +48,27 @@ func NewProject(gitlab *GitLab, groupId int, source sources.Source, username str
 		SourceUsername:   username,
 		Source:           source,
 		SourceRepository: sourceRepository,
+		Config:           config,
 	}
 }
 
 func (g *Project) RetrieveExistingRepo() (int, error) {
-	urlPath := fmt.Sprintf("/api/v4/groups/%d/projects?search=%s&per_page=100", g.DestinationRepository.ParentGroupID, g.SourceRepository.Name)
+	data := url.Values{}
+	data.Add("search", g.SourceRepository.Name)
+	data.Add("per_page", "100")
+
+	urlPath := fmt.Sprintf("/api/v4/groups/%d/projects?%s", g.DestinationRepository.ParentGroupID, data.Encode())
 	body, err := g.Destination.Request(http.MethodGet, urlPath, nil)
 	if err != nil {
 		return -1, err
 	}
 
+	if body.Status == http.StatusNotFound {
+		return -1, nil
+	}
+
 	var projects []ProjectGitLab
-	err = json.Unmarshal(body, &projects)
+	err = json.Unmarshal(body.Body, &projects)
 	if err != nil {
 		return -1, err
 	}
@@ -79,12 +89,12 @@ func (g *Project) RetrieveExistingRepo() (int, error) {
 
 func (g *Project) Import() (int, error) {
 	data := url.Values{}
-	data.Set("name", g.SourceRepository.Name)
-	data.Set("namespace_id", strconv.Itoa(g.DestinationRepository.ParentGroupID))
-	data.Set("import_url", g.SourceRepository.URL)
+	data.Add("name", g.SourceRepository.Name)
+	data.Add("namespace_id", strconv.Itoa(g.DestinationRepository.ParentGroupID))
+	data.Add("import_url", g.SourceRepository.URL)
 
 	if g.SourceRepository.Description != nil {
-		data.Set("description", *g.SourceRepository.Description)
+		data.Add("description", *g.SourceRepository.Description)
 	}
 
 	body, err := g.Destination.Request(http.MethodPost, "/api/v4/projects", []byte(data.Encode()))
@@ -92,19 +102,30 @@ func (g *Project) Import() (int, error) {
 		return -1, fmt.Errorf("creating request: %w", err)
 	}
 
-	var result struct {
-		ID int `json:"id"`
-	}
-	if err := json.Unmarshal(body, &result); err != nil {
+	var result ProjectGitLab
+	if err := json.Unmarshal(body.Body, &result); err != nil {
 		return -1, fmt.Errorf("parsing JSON response: %w", err)
 	}
 
-	g.DestinationRepository.ID = &result.ID
-	return result.ID, nil
+	g.DestinationRepository.ID = result.ID
+	g.DestinationRepository.HttpUrl = result.HttpUrl
+	g.DestinationRepository.PathWithNamespace = result.PathWithNamespace
+
+	return *result.ID, nil
+}
+
+func (g *Project) SetOriginalURL() error {
+	data := url.Values{}
+	data.Add("key", "original_url")
+	data.Add("value", g.SourceRepository.URL)
+
+	urlPath := fmt.Sprintf("/api/v4/projects/%d/variables", *g.DestinationRepository.ID)
+	_, err := g.Destination.Request(http.MethodPost, urlPath, []byte(data.Encode()))
+	return err
 }
 
 func (g *Project) LockUntilImport() error {
-	urlPath := fmt.Sprintf("/api/v4/projects/%d", g.DestinationRepository.ID)
+	urlPath := fmt.Sprintf("/api/v4/projects/%d", *g.DestinationRepository.ID)
 
 	for {
 		body, err := g.Destination.Request(http.MethodGet, urlPath, nil)
@@ -113,7 +134,7 @@ func (g *Project) LockUntilImport() error {
 		}
 
 		var result map[string]interface{}
-		if err := json.Unmarshal(body, &result); err != nil {
+		if err := json.Unmarshal(body.Body, &result); err != nil {
 			return err
 		}
 
@@ -130,16 +151,8 @@ func (g *Project) LockUntilImport() error {
 	}
 }
 
-func (g *Project) SetOriginalURL() error {
-	urlPath := fmt.Sprintf("/api/v4/projects/%d/variables", g.DestinationRepository.ID)
-	data := "key=original_url&value=" + g.SourceRepository.URL
-
-	_, err := g.Destination.Request(http.MethodPost, urlPath, []byte(data))
-	return err
-}
-
 func (g *Project) GetProtectedBranches() ([]string, error) {
-	urlPath := fmt.Sprintf("/api/v4/projects/%d/protected_branches", g.DestinationRepository.ID)
+	urlPath := fmt.Sprintf("/api/v4/projects/%d/protected_branches", *g.DestinationRepository.ID)
 	body, err := g.Destination.Request(http.MethodGet, urlPath, nil)
 	if err != nil {
 		return nil, err
@@ -148,7 +161,7 @@ func (g *Project) GetProtectedBranches() ([]string, error) {
 	branches := make([]struct {
 		Name string `json:"name"`
 	}, 0)
-	if err = json.Unmarshal(body, &branches); err != nil {
+	if err = json.Unmarshal(body.Body, &branches); err != nil {
 		return nil, err
 	}
 
@@ -163,13 +176,9 @@ func (g *Project) GetProtectedBranches() ([]string, error) {
 func (g *Project) UnprotectBranch(name string) error {
 	encodedBranch := url.QueryEscape(name)
 
-	urlPath := fmt.Sprintf("/api/v4/projects/%d/protected_branches/%s", g.DestinationRepository.ID, encodedBranch)
+	urlPath := fmt.Sprintf("/api/v4/projects/%d/protected_branches/%s", *g.DestinationRepository.ID, encodedBranch)
 	_, err := g.Destination.Request(http.MethodDelete, urlPath, nil)
 	return err
-}
-
-func (g *Project) LinkAsset(tagName, assetName, assetUrl string) error {
-	return nil
 }
 
 func (g *Project) CloneFromSource() error {
@@ -187,7 +196,7 @@ func (g *Project) CloneFromSource() error {
 
 func (g *Project) AddRemoteToRepo() error {
 	if g.Repo == nil {
-		return fmt.Errorf("no repository found for project %d", g.DestinationRepository.ID)
+		return fmt.Errorf("no repository found for project %d", *g.DestinationRepository.ID)
 	}
 
 	// Create url
@@ -204,7 +213,7 @@ func (g *Project) AddRemoteToRepo() error {
 
 func (g *Project) GetBranches() ([]string, error) {
 	if g.Repo == nil {
-		return nil, fmt.Errorf("no repository found for project %d", g.DestinationRepository.ID)
+		return nil, fmt.Errorf("no repository found for project %d", *g.DestinationRepository.ID)
 	}
 
 	branches, err := g.Repo.Branches()
@@ -226,7 +235,7 @@ func (g *Project) GetBranches() ([]string, error) {
 
 func (g *Project) PushBranch(name string) error {
 	if g.Repo == nil {
-		return fmt.Errorf("no repository found for project %d", g.DestinationRepository.ID)
+		return fmt.Errorf("no repository found for project %d", *g.DestinationRepository.ID)
 	}
 
 	pushOptions := &git.PushOptions{
@@ -238,7 +247,7 @@ func (g *Project) PushBranch(name string) error {
 	}
 
 	// Perform the push
-	if err := g.Repo.Push(pushOptions); err != nil {
+	if err := g.Repo.Push(pushOptions); err != nil && err.Error() != "already up-to-date" {
 		return err
 	}
 
@@ -247,7 +256,7 @@ func (g *Project) PushBranch(name string) error {
 
 func (g *Project) PushAllTags() error {
 	if g.Repo == nil {
-		return fmt.Errorf("no repository found for project %d", g.DestinationRepository.ID)
+		return fmt.Errorf("no repository found for project %d", *g.DestinationRepository.ID)
 	}
 
 	pushOptions := &git.PushOptions{
@@ -257,17 +266,50 @@ func (g *Project) PushAllTags() error {
 	}
 
 	// Perform the push
-	if err := g.Repo.Push(pushOptions); err != nil {
+	if err := g.Repo.Push(pushOptions); err != nil && err.Error() != "already up-to-date" {
 		return err
 	}
 
 	return nil
 }
 
-func (g *Project) InitWikiProject() {
+func (g *Project) ReleaseExists(tagName string) (bool, error) {
+	tagNameEncoded := url.QueryEscape(tagName)
+	urlPath := fmt.Sprintf("/api/v4/projects/%d/releases/%s", *g.DestinationRepository.ID, tagNameEncoded)
+
+	body, err := g.Destination.Request(http.MethodGet, urlPath, nil)
+	if err != nil {
+		return false, fmt.Errorf("creating request: %w", err)
+	}
+
+	return body.Status != http.StatusNotFound, nil
+}
+
+func (g *Project) CreateRelease(release sources.SourceRelease) error {
+	data := url.Values{}
+	data.Add("name", release.Name)
+	data.Add("tag_name", release.TagName)
+	data.Add("description", release.Description)
+	data.Add("released_at", release.CreatedAt)
+
+	urlPath := fmt.Sprintf("/api/v4/projects/%d/releases", *g.DestinationRepository.ID)
+
+	body, err := g.Destination.Request(http.MethodPost, urlPath, []byte(data.Encode()))
+	if err != nil {
+		return fmt.Errorf("creating request: %w", err)
+	}
+
+	if body.Status != http.StatusCreated {
+		return fmt.Errorf("create release: status %d", body.Status)
+	}
+
+	return nil
+}
+
+func (g *Project) GetWikiProject() *Project {
 	dstRepoUrl := fmt.Sprintf("%s/%s.wiki.git", g.Destination.URL.String(), *g.DestinationRepository.PathWithNamespace)
 
-	g.Wiki = &Project{
+	return &Project{
 		Destination: g.Destination,
 		DestinationRepository: &ProjectGitLab{
 			ID:            nil,

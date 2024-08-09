@@ -2,11 +2,10 @@ package main
 
 import (
 	"bytes"
-	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 )
 
 type GitLab struct {
@@ -21,37 +20,83 @@ func NewGitLab(url url.URL, apiToken string) *GitLab {
 	}
 }
 
-func (g *GitLab) Request(method, path string, data []byte) ([]byte, error) {
-	var httpReq *http.Request
+type Response struct {
+	Status int
+	Body   []byte
+}
+
+func (g *GitLab) Request(method, path string, data []byte) (*Response, error) {
+	pathQuery := strings.Split(path, "?")
+
+	urlPath := g.URL.JoinPath(pathQuery[0])
+	if len(pathQuery) > 1 {
+		urlPath.RawQuery = pathQuery[1]
+	}
+
+	var req *http.Request
 	var err error
 
 	if data != nil {
-		httpReq, err = http.NewRequest(method, g.URL.JoinPath(path).String(), bytes.NewBuffer(data))
+		req, err = http.NewRequest(method, urlPath.String(), bytes.NewBuffer(data))
+		req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 	} else {
-		httpReq, err = http.NewRequest(method, g.URL.JoinPath(path).String(), nil)
+		req, err = http.NewRequest(method, urlPath.String(), nil)
 	}
 
 	if err != nil {
 		return nil, err
 	}
 
-	httpReq.Header.Add("Private-Token", g.APIToken)
-	httpReq.Header.Add("Content-Type", "application/json")
+	req.Header.Add("Private-Token", g.APIToken)
+	req.Header.Add("Accept", "*/*")
 
 	client := &http.Client{}
-	httpResp, err := client.Do(httpReq)
+	res, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
-	defer httpResp.Body.Close()
+	defer res.Body.Close()
 
-	respBody, err := io.ReadAll(httpResp.Body)
-	if httpResp.StatusCode >= 300 {
-		if err != nil {
-			return nil, fmt.Errorf("status code: %d, failed to read response body: %w", httpResp.StatusCode, err)
-		}
-		return nil, errors.New(fmt.Sprintf("status code: %d, body: %s", httpResp.StatusCode, string(respBody)))
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, err
 	}
 
-	return respBody, err
+	return &Response{
+		Status: res.StatusCode,
+		Body:   body,
+	}, nil
+}
+
+func (g *GitLab) isReservedName(name string) bool {
+	rn := []string{
+		".github",
+		"badges",
+		"blame",
+		"blob",
+		"builds",
+		"commits",
+		"create",
+		"create_dir",
+		"edit",
+		"environments/folders",
+		"files",
+		"find_file",
+		"gitlab-lfs/objects",
+		"info/lfs/objects",
+		"new",
+		"preview",
+		"raw",
+		"refs",
+		"tree",
+		"update",
+		"wikis",
+	}
+
+	for _, rn := range rn {
+		if name == rn {
+			return true
+		}
+	}
+	return false
 }
