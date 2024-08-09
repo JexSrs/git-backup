@@ -1,5 +1,7 @@
 package sources
 
+import "main/src/utils"
+
 type HuggingFace struct {
 	Token string
 }
@@ -21,5 +23,5 @@ func (g *HuggingFace) GetWikiURL(username, repoName string) string {
 }
 
 func (g *HuggingFace) FetchReleases(username, repoName string) ([]SourceRelease, error) {
-	return reverse([]SourceRelease{}), nil
+	return utils.Reverse([]SourceRelease{}), nil
 }

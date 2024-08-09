@@ -1,6 +1,9 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"main/src/utils"
+)
 
 type Configuration struct {
 	Gitlab  ConfigGitLab  `json:"gitlab"`
@@ -91,27 +94,27 @@ type ConfigRepositoryRepository struct {
 
 func (c *Configuration) PopulateDefault() {
 	if c.Gitlab.URL == nil {
-		c.Gitlab.URL = Pointer("https://gitlab.com/")
+		c.Gitlab.URL = utils.Pointer("https://gitlab.com/")
 	}
 
 	if c.Config.Wiki.Exclude == nil {
-		c.Config.Wiki.Exclude = Pointer(false)
+		c.Config.Wiki.Exclude = utils.Pointer(false)
 	}
 
 	if c.Config.Releases.Exclude == nil {
-		c.Config.Releases.Exclude = Pointer(false)
+		c.Config.Releases.Exclude = utils.Pointer(false)
 	}
 
 	if c.Config.Releases.Assets.Exclude == nil {
-		c.Config.Releases.Assets.Exclude = Pointer(false)
+		c.Config.Releases.Assets.Exclude = utils.Pointer(false)
 	}
 
 	if c.Config.Releases.Assets.Threshold == nil {
-		c.Config.Releases.Assets.Threshold = Pointer(5)
+		c.Config.Releases.Assets.Threshold = utils.Pointer(5)
 	}
 
 	if c.Config.Releases.Assets.MaxSize == nil {
-		c.Config.Releases.Assets.MaxSize = Pointer("1G")
+		c.Config.Releases.Assets.MaxSize = utils.Pointer("1G")
 	}
 
 	if c.Groups == nil {
@@ -144,14 +147,14 @@ func (c *Configuration) PopulateDefault() {
 		repo := &c.Groups[i]
 
 		if repo.Skip == nil {
-			repo.Skip = Pointer(0)
+			repo.Skip = utils.Pointer(0)
 		}
 
 		for j := range repo.Repositories {
 			repo2 := &repo.Repositories[j]
 
 			if repo2.Exclude == nil {
-				repo2.Exclude = Pointer(false)
+				repo2.Exclude = utils.Pointer(false)
 			}
 
 			// Default to global variables
@@ -176,10 +179,6 @@ func (c *Configuration) PopulateDefault() {
 			}
 		}
 	}
-}
-
-func Pointer[T any](s T) *T {
-	return &s
 }
 
 func (c *Configuration) Validate() error {

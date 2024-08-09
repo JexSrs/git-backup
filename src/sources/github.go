@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"main/src/utils"
 	"net/http"
 )
 
@@ -88,5 +89,5 @@ func (g *Github) FetchReleases(username, repoName string) ([]SourceRelease, erro
 		return nil, fmt.Errorf("error decoding JSON to map: %v", err)
 	}
 
-	return reverse(repositories), nil
+	return utils.Reverse(repositories), nil
 }

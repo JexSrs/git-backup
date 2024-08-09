@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"main/src/sources"
+	"main/src/utils"
 )
 
 func SyncUser(gitlab *GitLab, dufs *Dufs, sourceCfg ConfigRepo, groupCfg ConfigGroup, source sources.Source) {
@@ -194,9 +195,12 @@ func SyncRepo(prj *Project) error {
 
 			if !*prj.Config.Releases.Assets.Exclude {
 				fmt.Printf("    - Found %d assets\n", len(release.Assets))
-				//for _, asset := range release.Assets {
-				//
-				//}
+				for _, asset := range release.Assets {
+					fmt.Printf("    - Downloading asset: %s\n", asset.Name)
+					if err := utils.DownloadAsset(asset.BrowserDownloadUrl, "/tmp/git-backup/"+asset.Name); err != nil {
+						return err
+					}
+				}
 			}
 		}
 	}
