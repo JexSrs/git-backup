@@ -50,7 +50,7 @@
             }
         }
     },
-    "repositories": [
+    "groups": [
         {
             "source": "github",
             "username": "user1",

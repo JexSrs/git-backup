@@ -3,15 +3,20 @@ package main
 import "fmt"
 
 type Configuration struct {
-	Gitlab       ConfigGitLab       `json:"gitlab"`
-	Config       ConfigRepo         `json:"config"`
-	Sources      ConfigSources      `json:"sources"`
-	Repositories []ConfigRepository `json:"repositories"`
+	Gitlab  ConfigGitLab  `json:"gitlab"`
+	Dufs    ConfigDufs    `json:"dufs"`
+	Config  ConfigRepo    `json:"config"`
+	Sources ConfigSources `json:"sources"`
+	Groups  []ConfigGroup `json:"groups"`
 }
 
 type ConfigGitLab struct {
 	URL   *string `json:"url"`
 	Token *string `json:"token"`
+}
+
+type ConfigDufs struct {
+	URL *string `json:"url"`
 }
 
 // Sources configuration
@@ -55,7 +60,7 @@ type ConfigRepoAssets struct {
 
 // Repositories configuration
 
-type ConfigRepository struct {
+type ConfigGroup struct {
 	Source        string `json:"source"`
 	Username      string `json:"username"`
 	GitLabGroupID *int   `json:"gitlab_group_id"`
@@ -63,6 +68,18 @@ type ConfigRepository struct {
 	Skip *int `json:"skip"`
 
 	Repositories []ConfigRepositoryRepository `json:"repositories"`
+}
+
+func (c *ConfigGroup) GetConfig(repoName string) *ConfigRepositoryRepository {
+	if len(c.Repositories) > 0 {
+		for _, repo := range c.Repositories {
+			if repo.Name == repoName {
+				return &repo
+			}
+		}
+	}
+
+	return nil
 }
 
 type ConfigRepositoryRepository struct {
@@ -97,8 +114,8 @@ func (c *Configuration) PopulateDefault() {
 		c.Config.Releases.Assets.MaxSize = Pointer("1G")
 	}
 
-	if c.Repositories == nil {
-		c.Repositories = make([]ConfigRepository, 0)
+	if c.Groups == nil {
+		c.Groups = make([]ConfigGroup, 0)
 	}
 
 	if c.Sources.GitHub != nil {
@@ -123,8 +140,8 @@ func (c *Configuration) PopulateDefault() {
 		}
 	}
 
-	for i := range c.Repositories {
-		repo := &c.Repositories[i]
+	for i := range c.Groups {
+		repo := &c.Groups[i]
 
 		if repo.Skip == nil {
 			repo.Skip = Pointer(0)
@@ -170,11 +187,15 @@ func (c *Configuration) Validate() error {
 		return fmt.Errorf("gitlab token is required")
 	}
 
+	if c.Dufs.URL == nil {
+		return fmt.Errorf("dufs url is required")
+	}
+
 	if c.Sources.GitHub == nil && c.Sources.HuggingFace == nil {
 		return fmt.Errorf("at least one source is required")
 	}
 
-	for i, repo := range c.Repositories {
+	for i, repo := range c.Groups {
 		if repo.Source != "github" && repo.Source != "huggingface" {
 			return fmt.Errorf("source must be github or huggingface at index %d", i)
 		}

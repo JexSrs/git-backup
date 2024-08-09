@@ -5,11 +5,11 @@ import (
 	"main/src/sources"
 )
 
-func SyncUser(gitlab *GitLab, configSource ConfigRepo, configRepo ConfigRepository, source sources.Source) {
+func SyncUser(gitlab *GitLab, dufs *Dufs, sourceCfg ConfigRepo, groupCfg ConfigGroup, source sources.Source) {
 	pageNum := 0
 	count := 1
 
-	results, err := source.Paginate(configRepo.Username, pageNum)
+	results, err := source.Paginate(groupCfg.Username, pageNum)
 	for {
 		if err != nil {
 			fmt.Println(err)
@@ -20,29 +20,36 @@ func SyncUser(gitlab *GitLab, configSource ConfigRepo, configRepo ConfigReposito
 			break
 		}
 
-		for _, result := range results {
+		for _, remote := range results {
+			if gitlab.isReservedName(remote.Name) {
+				fmt.Printf("Skipping repository %s: reserved name\n", remote.Name)
+				continue
+			}
+
+			if groupCfg.Skip != nil && *groupCfg.Skip >= count {
+				fmt.Printf("Skipping repository %s: from --skip\n", remote.Name)
+				continue
+			}
+
 			// Find configuration for that repo
-			cfg := configSource // Default to source's config
-			exclude := false
-			if len(configRepo.Repositories) > 0 {
-				for _, repo := range configRepo.Repositories {
-					if repo.Name == result.Name {
-						cfg = repo.ConfigRepo
-						exclude = *repo.Exclude
+			cfg := sourceCfg // Default to source's config
+			if len(groupCfg.Repositories) > 0 {
+				cf := groupCfg.GetConfig(remote.Name)
+				if cf != nil {
+					cfg = cf.ConfigRepo
+
+					if *cf.Exclude {
+						fmt.Printf("Skipping repository %s: from --exclude\n", remote.Name)
+						continue
 					}
+				} else {
+					fmt.Printf("Skipping repository %s: from --include-only\n", remote.Name)
+					continue
 				}
 			}
 
-			if exclude {
-				continue
-			}
-
-			if gitlab.isReservedName(result.Name) {
-				continue
-			}
-
-			fmt.Printf("\n%d. Evaluating GitHub repository '%s'\n", count, result.Name)
-			prj := NewProject(gitlab, *configRepo.GitLabGroupID, source, configRepo.Username, result, cfg)
+			fmt.Printf("\n%d. Evaluating repository %s\n", count, remote.Name)
+			prj := NewProject(gitlab, dufs, *groupCfg.GitLabGroupID, source, groupCfg.Username, remote, cfg)
 			if err := SyncRepo(prj); err != nil {
 				fmt.Println(err)
 			}
@@ -51,7 +58,7 @@ func SyncUser(gitlab *GitLab, configSource ConfigRepo, configRepo ConfigReposito
 		}
 
 		pageNum++
-		results, err = source.Paginate(configRepo.Username, pageNum)
+		results, err = source.Paginate(groupCfg.Username, pageNum)
 	}
 }
 

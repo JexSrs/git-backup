@@ -29,6 +29,9 @@ func main() {
 	gitlabUrl, _ := url.Parse(*config.Gitlab.URL)
 	gitlab := NewGitLab(*gitlabUrl, *config.Gitlab.Token)
 
+	dufsUrl, _ := url.Parse(*config.Dufs.URL)
+	dufs := NewDufs(dufsUrl.String())
+
 	var github *sources.Github
 	if config.Sources.GitHub != nil {
 		github = sources.NewGithub(config.Sources.GitHub.Token)
@@ -39,7 +42,7 @@ func main() {
 		huggingFace = sources.NewHuggingFace(config.Sources.HuggingFace.Token)
 	}
 
-	for _, configRepo := range config.Repositories {
+	for _, configRepo := range config.Groups {
 		var source sources.Source
 		var configSource ConfigRepo
 
@@ -61,6 +64,6 @@ func main() {
 			log.Fatal("source github missing configuration")
 		}
 
-		SyncUser(gitlab, configSource, configRepo, source)
+		SyncUser(gitlab, dufs, configSource, configRepo, source)
 	}
 }

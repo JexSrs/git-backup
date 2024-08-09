@@ -21,6 +21,7 @@ type Project struct {
 
 	Destination           *GitLab
 	DestinationRepository *ProjectGitLab
+	DestinationStorage    *Dufs
 
 	Source           sources.Source
 	SourceUsername   string
@@ -37,7 +38,7 @@ type ProjectGitLab struct {
 	ParentGroupID     int
 }
 
-func NewProject(gitlab *GitLab, groupId int, source sources.Source, username string, sourceRepository sources.SourceRepository, config ConfigRepo) *Project {
+func NewProject(gitlab *GitLab, dufs *Dufs, groupId int, source sources.Source, username string, sourceRepository sources.SourceRepository, config ConfigRepo) *Project {
 	return &Project{
 		Destination: gitlab,
 		DestinationRepository: &ProjectGitLab{
@@ -45,10 +46,11 @@ func NewProject(gitlab *GitLab, groupId int, source sources.Source, username str
 			HttpUrl:       nil,
 			ParentGroupID: groupId,
 		},
-		SourceUsername:   username,
-		Source:           source,
-		SourceRepository: sourceRepository,
-		Config:           config,
+		DestinationStorage: dufs,
+		SourceUsername:     username,
+		Source:             source,
+		SourceRepository:   sourceRepository,
+		Config:             config,
 	}
 }
 
