@@ -56,9 +56,8 @@ type ConfigRepoReleases struct {
 }
 
 type ConfigRepoAssets struct {
-	Exclude   *bool   `json:"exclude"`
-	Threshold *int    `json:"threshold"`
-	MaxSize   *string `json:"max_size"`
+	Exclude *bool   `json:"exclude"`
+	MaxSize *string `json:"max_size"`
 }
 
 // Repositories configuration
@@ -105,9 +104,8 @@ func (c *Configuration) PopulateDefault() {
 		Releases: ConfigRepoReleases{
 			Exclude: utils.Pointer(false),
 			Assets: ConfigRepoAssets{
-				Exclude:   utils.Pointer(false),
-				Threshold: utils.Pointer(5),
-				MaxSize:   utils.Pointer("1G"),
+				Exclude: utils.Pointer(false),
+				MaxSize: utils.Pointer("1G"),
 			},
 		},
 	})
@@ -160,10 +158,6 @@ func (c *ConfigRepo) DefaultFrom(from ConfigRepo) {
 
 	if c.Releases.Assets.Exclude == nil {
 		c.Releases.Assets.Exclude = from.Releases.Assets.Exclude
-	}
-
-	if c.Releases.Assets.Threshold == nil {
-		c.Releases.Assets.Threshold = from.Releases.Assets.Threshold
 	}
 
 	if c.Releases.Assets.MaxSize == nil {
