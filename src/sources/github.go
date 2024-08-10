@@ -16,10 +16,6 @@ func NewGithub(token string) *Github {
 	return &Github{Token: token}
 }
 
-func (g *Github) GetID() string {
-	return "github"
-}
-
 func (g *Github) Paginate(username string, page int) ([]SourceRepository, error) {
 	urlPath := fmt.Sprintf("https://api.github.com/users/%s/repos?per_page=100&page=%d", username, page)
 

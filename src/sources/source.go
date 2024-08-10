@@ -1,11 +1,14 @@
 package sources
 
+const (
+	GitHubID      = "github"
+	HuggingFaceID = "huggingface"
+)
+
 type Source interface {
-	GetID() string
 	Paginate(username string, page int) ([]SourceRepository, error)
 	GetWikiURL(username, repoName string) string
 	FetchReleases(username, repoName string) ([]SourceRelease, error)
-	//DownloadAsset() error
 }
 
 type SourceRepository struct {

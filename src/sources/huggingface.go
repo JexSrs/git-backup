@@ -10,10 +10,6 @@ func NewHuggingFace(token string) *HuggingFace {
 	return &HuggingFace{Token: token}
 }
 
-func (g *HuggingFace) GetID() string {
-	return "huggingface"
-}
-
 func (g *HuggingFace) Paginate(username string, page int) ([]SourceRepository, error) {
 	return []SourceRepository{}, nil
 }

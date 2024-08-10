@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"main/src/sources"
 	"main/src/utils"
 )
 
@@ -129,9 +130,9 @@ func (c *Configuration) PopulateDefault() {
 			group.Skip = utils.Pointer(0)
 		}
 
-		if group.Source == "github" {
+		if group.Source == sources.GitHubID {
 			group.Config.DefaultFrom(c.Sources.GitHub.Config)
-		} else if group.Source == "huggingface" {
+		} else if group.Source == sources.HuggingFaceID {
 			group.Config.DefaultFrom(c.Sources.HuggingFace.Config)
 		}
 
@@ -179,7 +180,7 @@ func (c *Configuration) Validate() error {
 	}
 
 	for i, repo := range c.Groups {
-		if repo.Source != "github" && repo.Source != "huggingface" {
+		if repo.Source != sources.GitHubID && repo.Source != sources.HuggingFaceID {
 			return fmt.Errorf("source must be github or huggingface at index %d", i)
 		}
 

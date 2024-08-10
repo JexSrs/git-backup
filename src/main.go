@@ -51,21 +51,21 @@ func main() {
 		var source sources.Source
 		var configSource ConfigRepo
 
-		if github.GetID() == configRepo.Source {
+		if configRepo.Source == sources.GitHubID {
 			source = github
 			configSource = config.Sources.GitHub.Config
-		} else if huggingFace.GetID() == configRepo.Source {
+		} else if configRepo.Source == sources.HuggingFaceID {
 			source = huggingFace
 			configSource = config.Sources.HuggingFace.Config
 		} else {
 			log.Fatalf("source %s not found", configRepo.Source)
 		}
 
-		if github.GetID() == configRepo.Source && config.Sources.GitHub == nil {
+		if configRepo.Source == sources.GitHubID && config.Sources.GitHub == nil {
 			log.Fatal("source github missing configuration")
 		}
 
-		if huggingFace.GetID() == configRepo.Source && config.Sources.HuggingFace == nil {
+		if configRepo.Source == sources.HuggingFaceID && config.Sources.HuggingFace == nil {
 			log.Fatal("source github missing configuration")
 		}
 
