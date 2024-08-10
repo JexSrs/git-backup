@@ -1,0 +1,104 @@
+{
+    // Configuration settings for the destination GitLab server where repositories will be saved.
+    "gitlab": {
+        "url": "", // URL of the GitLab instance; defaults to "https://gitlab.com/" when empty.
+        "token": "" // Personal access token for GitLab user authentication.
+    },
+    // Global configuration that applies to all sourced groups and repositories unless specifically overridden locally.
+    "config": {
+        "wiki": {
+            // Determines whether wiki syncing is excluded (true) or included (false); defaults to false
+            "exclude": true
+        },
+        "releases": {
+            // Determines whether syncing of releases and their assets is excluded (true) or included (false); defaults to false
+            "exclude": true,
+            "assets": {
+                // If true, assets will not be downloaded but will be linked directly from the original source URL; defaults to false.
+                "exclude": true,
+                // Maximum allowed size of assets to be synced. If set to "none", all assets will be synced regardless of size.
+                "max_size": "1GB"
+            }
+        }
+    },
+    // Defines the source platforms from which repositories will be synced.
+    "sources": {
+        "github": {
+            "token": "", // Personal access token for GitHub user authentication.
+            // Overrides global configuration for GitHub-sourced repositories, if specified.
+            "config": {
+                "wiki": {
+                    "exclude": true
+                },
+                "releases": {
+                    "exclude": true,
+                    "assets": {
+                        "exclude": true,
+                        "threshold": 5,
+                        "maxSize": "1GB"
+                    }
+                }
+            }
+        },
+        "huggingface": {
+            "token": "", // Personal access token for HuggingFace user authentication.
+            // Overrides global configuration for HuggingFace-sourced repositories, if specified.
+            "config": {
+                "wiki": {
+                    "exclude": true
+                },
+                "releases": {
+                    "exclude": true,
+                    "assets": {
+                        "exclude": true,
+                        "threshold": 5,
+                        "maxSize": "1GB"
+                    }
+                }
+            }
+        }
+    },
+    // Configuration for specific groups of repositories
+    "groups": [
+        {
+            "source": "github", // Indicates the source platform: either "github" or "huggingface".
+            "username": "opensearch-project", // Username of the group in the source platform.
+            "gitlab_group_id": 1227, // Parent GitLab group ID where the repositories will be saved.
+            // Local overriding configuration specific to this group.
+            "config": {
+                "wiki": {
+                    "exclude": true
+                },
+                "releases": {
+                    "exclude": true,
+                    "assets": {
+                        "exclude": true,
+                        "threshold": 5,
+                        "max_size": "1GB"
+                    }
+                }
+            },
+            // List of specific repositories to sync. If empty, all repositories from the group will be synced.
+            "repositories": [
+                {
+                    "name": "OpenSearch", // Name of the repository.
+                    "exclude": false, // If true, the repository will not be synced.
+                    // Local overriding configuration specific to this repository.
+                    "wiki": {
+                        "exclude": true
+                    },
+                    "releases": {
+                        "exclude": true,
+                        "assets": {
+                            "exclude": true,
+                            "threshold": 5,
+                            "max_size": "1GB"
+                        }
+                    }
+                },
+                // Additional repositories can be specified here...
+            ]
+        },
+        // Additional groups can be specified here...
+    ]
+}
