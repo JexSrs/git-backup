@@ -4,14 +4,15 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 )
 
 type Dufs struct {
-	URL string
+	URL url.URL
 }
 
-func NewDufs(url string) *Dufs {
+func NewDufs(url url.URL) *Dufs {
 	return &Dufs{url}
 }
 
@@ -22,7 +23,7 @@ func (d *Dufs) UploadFIle(srcPath, dstPath string) error {
 	}
 	defer file.Close()
 
-	request, err := http.NewRequest(http.MethodPut, d.URL+dstPath, file)
+	request, err := http.NewRequest(http.MethodPut, d.URL.JoinPath(dstPath).String(), file)
 	if err != nil {
 		return fmt.Errorf("error creating request: %w", err)
 	}
@@ -43,7 +44,7 @@ func (d *Dufs) UploadFIle(srcPath, dstPath string) error {
 }
 
 func (d *Dufs) DeletePath(path string) error {
-	req, err := http.NewRequest(http.MethodDelete, d.URL+path, nil)
+	req, err := http.NewRequest(http.MethodDelete, d.URL.JoinPath(path).String(), nil)
 	if err != nil {
 		return fmt.Errorf("error creating request: %w", err)
 	}

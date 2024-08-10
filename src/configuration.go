@@ -68,7 +68,8 @@ type ConfigGroup struct {
 	Username      string `json:"username"`
 	GitLabGroupID *int   `json:"gitlab_group_id"`
 
-	Skip *int `json:"skip"`
+	Skip   *int       `json:"skip"`
+	Config ConfigRepo `json:"config"`
 
 	Repositories []ConfigRepositoryRepository `json:"repositories"`
 }
@@ -97,87 +98,76 @@ func (c *Configuration) PopulateDefault() {
 		c.Gitlab.URL = utils.Pointer("https://gitlab.com/")
 	}
 
-	if c.Config.Wiki.Exclude == nil {
-		c.Config.Wiki.Exclude = utils.Pointer(false)
-	}
-
-	if c.Config.Releases.Exclude == nil {
-		c.Config.Releases.Exclude = utils.Pointer(false)
-	}
-
-	if c.Config.Releases.Assets.Exclude == nil {
-		c.Config.Releases.Assets.Exclude = utils.Pointer(false)
-	}
-
-	if c.Config.Releases.Assets.Threshold == nil {
-		c.Config.Releases.Assets.Threshold = utils.Pointer(5)
-	}
-
-	if c.Config.Releases.Assets.MaxSize == nil {
-		c.Config.Releases.Assets.MaxSize = utils.Pointer("1G")
-	}
+	c.Config.DefaultFrom(ConfigRepo{
+		Wiki: ConfigRepoWiki{
+			Exclude: utils.Pointer(false),
+		},
+		Releases: ConfigRepoReleases{
+			Exclude: utils.Pointer(false),
+			Assets: ConfigRepoAssets{
+				Exclude:   utils.Pointer(false),
+				Threshold: utils.Pointer(5),
+				MaxSize:   utils.Pointer("1G"),
+			},
+		},
+	})
 
 	if c.Groups == nil {
 		c.Groups = make([]ConfigGroup, 0)
 	}
 
 	if c.Sources.GitHub != nil {
-		if c.Sources.GitHub.Config.Wiki.Exclude == nil {
-			c.Sources.GitHub.Config.Wiki.Exclude = c.Config.Wiki.Exclude
-		}
+		c.Sources.GitHub.Config.DefaultFrom(c.Config)
+	}
 
-		if c.Sources.GitHub.Config.Releases.Exclude == nil {
-			c.Sources.GitHub.Config.Releases.Exclude = c.Config.Releases.Exclude
-		}
-
-		if c.Sources.GitHub.Config.Releases.Assets.Exclude == nil {
-			c.Sources.GitHub.Config.Releases.Assets.Exclude = c.Config.Releases.Assets.Exclude
-		}
-
-		if c.Sources.GitHub.Config.Releases.Assets.Threshold == nil {
-			c.Sources.GitHub.Config.Releases.Assets.Threshold = c.Config.Releases.Assets.Threshold
-		}
-
-		if c.Sources.GitHub.Config.Releases.Assets.MaxSize == nil {
-			c.Sources.GitHub.Config.Releases.Assets.MaxSize = c.Config.Releases.Assets.MaxSize
-		}
+	if c.Sources.HuggingFace != nil {
+		c.Sources.HuggingFace.Config.DefaultFrom(c.Config)
 	}
 
 	for i := range c.Groups {
-		repo := &c.Groups[i]
+		group := &c.Groups[i]
 
-		if repo.Skip == nil {
-			repo.Skip = utils.Pointer(0)
+		if group.Skip == nil {
+			group.Skip = utils.Pointer(0)
 		}
 
-		for j := range repo.Repositories {
-			repo2 := &repo.Repositories[j]
-
-			if repo2.Exclude == nil {
-				repo2.Exclude = utils.Pointer(false)
-			}
-
-			// Default to global variables
-			if repo2.Wiki.Exclude == nil {
-				repo2.Wiki.Exclude = c.Config.Wiki.Exclude
-			}
-
-			if repo2.Releases.Exclude == nil {
-				repo2.Releases.Exclude = c.Config.Releases.Exclude
-			}
-
-			if repo2.Releases.Assets.Exclude == nil {
-				repo2.Releases.Assets.Exclude = c.Config.Releases.Assets.Exclude
-			}
-
-			if repo2.Releases.Assets.Threshold == nil {
-				repo2.Releases.Assets.Threshold = c.Config.Releases.Assets.Threshold
-			}
-
-			if repo2.Releases.Assets.MaxSize == nil {
-				repo2.Releases.Assets.MaxSize = c.Config.Releases.Assets.MaxSize
-			}
+		if group.Source == "github" {
+			group.Config.DefaultFrom(c.Sources.GitHub.Config)
+		} else if group.Source == "huggingface" {
+			group.Config.DefaultFrom(c.Sources.HuggingFace.Config)
 		}
+
+		for j := range group.Repositories {
+			repo := &group.Repositories[j]
+
+			if repo.Exclude == nil {
+				repo.Exclude = utils.Pointer(false)
+			}
+
+			repo.ConfigRepo.DefaultFrom(group.Config)
+		}
+	}
+}
+
+func (c *ConfigRepo) DefaultFrom(from ConfigRepo) {
+	if c.Wiki.Exclude == nil {
+		c.Wiki.Exclude = from.Wiki.Exclude
+	}
+
+	if c.Releases.Exclude == nil {
+		c.Releases.Exclude = from.Releases.Exclude
+	}
+
+	if c.Releases.Assets.Exclude == nil {
+		c.Releases.Assets.Exclude = from.Releases.Assets.Exclude
+	}
+
+	if c.Releases.Assets.Threshold == nil {
+		c.Releases.Assets.Threshold = from.Releases.Assets.Threshold
+	}
+
+	if c.Releases.Assets.MaxSize == nil {
+		c.Releases.Assets.MaxSize = from.Releases.Assets.MaxSize
 	}
 }
 

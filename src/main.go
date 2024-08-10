@@ -1,21 +1,22 @@
 package main
 
 import (
-	"encoding/json"
-	"io/ioutil"
+	"fmt"
+	"github.com/yosuke-furukawa/json5/encoding/json5"
 	"log"
 	"main/src/sources"
+	"main/src/utils"
 	"net/url"
 )
 
 func main() {
-	file, err := ioutil.ReadFile("./config.json")
+	file, err := utils.OpenConfigFile()
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	var config Configuration
-	err = json.Unmarshal(file, &config)
+	err = json5.Unmarshal(file, &config)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -30,7 +31,7 @@ func main() {
 	gitlab := NewGitLab(*gitlabUrl, *config.Gitlab.Token)
 
 	dufsUrl, _ := url.Parse(*config.Dufs.URL)
-	dufs := NewDufs(dufsUrl.String())
+	dufs := NewDufs(*dufsUrl)
 
 	var github *sources.Github
 	if config.Sources.GitHub != nil {
@@ -43,6 +44,10 @@ func main() {
 	}
 
 	for _, configRepo := range config.Groups {
+		fmt.Println("\n==========================")
+		fmt.Printf("Evaluating group %s\n", configRepo.Username)
+		fmt.Println("==========================")
+
 		var source sources.Source
 		var configSource ConfigRepo
 

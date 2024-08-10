@@ -54,7 +54,20 @@
         {
             "source": "github",
             "username": "user1",
-            "gitlab_group_id": 0
+            "gitlab_group_id": 0,
+            "config": {
+                "wiki": {
+                    "exclude": true
+                },
+                "releases": {
+                    "exclude": true,
+                    "assets": {
+                        "exclude": true,
+                        "threshold": 5,
+                        "max_size": "1GB"
+                    }
+                }
+            }
         },
         {
             "source": "github",

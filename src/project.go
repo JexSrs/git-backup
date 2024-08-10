@@ -104,6 +104,10 @@ func (g *Project) Import() (int, error) {
 		return -1, fmt.Errorf("creating request: %w", err)
 	}
 
+	if body.Status != http.StatusCreated {
+		return -1, fmt.Errorf("invalid response: %s", body.Body)
+	}
+
 	var result ProjectGitLab
 	if err := json.Unmarshal(body.Body, &result); err != nil {
 		return -1, fmt.Errorf("parsing JSON response: %w", err)
@@ -297,6 +301,27 @@ func (g *Project) CreateRelease(release sources.SourceRelease) error {
 	urlPath := fmt.Sprintf("/api/v4/projects/%d/releases", *g.DestinationRepository.ID)
 
 	body, err := g.Destination.Request(http.MethodPost, urlPath, []byte(data.Encode()))
+	if err != nil {
+		return fmt.Errorf("creating request: %w", err)
+	}
+
+	if body.Status != http.StatusCreated {
+		return fmt.Errorf("create release: status %d", body.Status)
+	}
+
+	return nil
+}
+
+func (g *Project) LinkAsset(tagName, assetName, assetUrl string) error {
+	encodedTagName := url.QueryEscape(tagName)
+
+	data := url.Values{}
+	data.Add("name", assetName)
+	data.Add("url", assetUrl)
+
+	urlPath := fmt.Sprintf("/api/v4/projects/%d/releases/%s/assets/links?%s", *g.DestinationRepository.ID, encodedTagName, data.Encode())
+
+	body, err := g.Destination.Request(http.MethodPost, urlPath, nil)
 	if err != nil {
 		return fmt.Errorf("creating request: %w", err)
 	}
