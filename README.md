@@ -29,3 +29,8 @@ docker compose up --build -d
 ## Configuration file
 
 See [config.example.json5](./config.example.json5) for how to configure.
+
+## TODOs
+
+1. If repositories' array contains only excluded repositories, then sync all except the mentioned ones
+2. Add new source GitLa
