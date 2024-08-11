@@ -167,10 +167,6 @@ func (c *ConfigRepo) DefaultFrom(from ConfigRepo) {
 }
 
 func (c *Configuration) Validate() error {
-	if c.Gitlab.Token == nil {
-		return fmt.Errorf("gitlab token is required")
-	}
-
 	if c.Dufs.URL == nil {
 		return fmt.Errorf("dufs url is required")
 	}
@@ -180,8 +176,16 @@ func (c *Configuration) Validate() error {
 	}
 
 	for i, repo := range c.Groups {
-		if repo.Source != sources.GitHubID && repo.Source != sources.HuggingFaceID {
-			return fmt.Errorf("source must be github or huggingface at index %d", i)
+		if repo.Source == sources.GitHubID {
+			if c.Sources.GitHub == nil {
+				return fmt.Errorf("github source is missing")
+			}
+		} else if repo.Source == sources.HuggingFaceID {
+			if c.Sources.HuggingFace == nil {
+				return fmt.Errorf("huggingface source is missing")
+			}
+		} else {
+			return fmt.Errorf("source %s is not valid at index %d", repo.Source, i)
 		}
 
 		if len(repo.Username) == 0 {

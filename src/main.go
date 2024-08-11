@@ -24,7 +24,7 @@ func main() {
 	config.PopulateDefault()
 
 	if err := config.Validate(); err != nil {
-		log.Fatal(err)
+		log.Fatal("Configuration error:", err)
 	}
 
 	gitlabUrl, _ := url.Parse(*config.Gitlab.URL)
@@ -38,16 +38,12 @@ func main() {
 		github = sources.NewGithub(config.Sources.GitHub.Token)
 	}
 
-	var huggingFace *sources.HuggingFace
+	var huggingFaceModel *sources.HuggingFace
 	if config.Sources.HuggingFace != nil {
-		huggingFace = sources.NewHuggingFace(config.Sources.HuggingFace.Token)
+		huggingFaceModel = sources.NewHuggingFace(config.Sources.HuggingFace.Token)
 	}
 
 	for _, configRepo := range config.Groups {
-		fmt.Println("\n==========================")
-		fmt.Printf("Evaluating group %s\n", configRepo.Username)
-		fmt.Println("==========================")
-
 		var source sources.Source
 		var configSource ConfigRepo
 
@@ -55,19 +51,15 @@ func main() {
 			source = github
 			configSource = config.Sources.GitHub.Config
 		} else if configRepo.Source == sources.HuggingFaceID {
-			source = huggingFace
+			source = huggingFaceModel
 			configSource = config.Sources.HuggingFace.Config
 		} else {
 			log.Fatalf("source %s not found", configRepo.Source)
 		}
 
-		if configRepo.Source == sources.GitHubID && config.Sources.GitHub == nil {
-			log.Fatal("source github missing configuration")
-		}
-
-		if configRepo.Source == sources.HuggingFaceID && config.Sources.HuggingFace == nil {
-			log.Fatal("source github missing configuration")
-		}
+		fmt.Println("\n==========================")
+		fmt.Printf("Evaluating group %s from %s\n", configRepo.Username, configRepo.Source)
+		fmt.Println("==========================")
 
 		SyncUser(gitlab, dufs, configSource, configRepo, source)
 	}

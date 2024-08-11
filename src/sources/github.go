@@ -12,11 +12,22 @@ type Github struct {
 	Token string
 }
 
+type GithubRepository struct {
+	Name        string  `json:"name"`
+	URL         string  `json:"clone_url"`
+	Description *string `json:"description"`
+}
+
 func NewGithub(token string) *Github {
 	return &Github{Token: token}
 }
 
-func (g *Github) Paginate(username string, page int) ([]SourceRepository, error) {
+func (g *Github) Paginate(username string, prev *PaginationResponse) (*PaginationResponse, error) {
+	page := 1
+	if prev != nil {
+		page = prev.NextPage
+	}
+
 	urlPath := fmt.Sprintf("https://api.github.com/users/%s/repos?per_page=100&page=%d", username, page)
 
 	req, err := http.NewRequest(http.MethodGet, urlPath, nil)
@@ -24,7 +35,9 @@ func (g *Github) Paginate(username string, page int) ([]SourceRepository, error)
 		return nil, fmt.Errorf("error creating request: %v", err)
 	}
 
-	req.Header.Set("Authorization", "Bearer "+g.Token)
+	if len(g.Token) > 0 {
+		req.Header.Set("Authorization", "Bearer "+g.Token)
+	}
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
@@ -42,12 +55,24 @@ func (g *Github) Paginate(username string, page int) ([]SourceRepository, error)
 		return nil, fmt.Errorf("error reading response body: %v", err)
 	}
 
-	repositories := make([]SourceRepository, 0)
-	if err := json.Unmarshal(body, &repositories); err != nil {
+	githubRepos := make([]GithubRepository, 0)
+	if err := json.Unmarshal(body, &githubRepos); err != nil {
 		return nil, fmt.Errorf("error decoding JSON to map: %v", err)
 	}
 
-	return repositories, nil
+	repos := make([]SourceRepository, 0)
+	for _, repo := range githubRepos {
+		repos = append(repos, SourceRepository{
+			Name:        repo.Name,
+			Description: repo.Description,
+			URL:         repo.URL,
+		})
+	}
+
+	return &PaginationResponse{
+		Repositories: repos,
+		NextPage:     page + 1,
+	}, nil
 }
 
 func (g *Github) GetWikiURL(username, repoName string) string {

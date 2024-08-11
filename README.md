@@ -9,7 +9,7 @@ It will retrieve and sync the following information for each public repo:
 
 Supported sources:
 - GitHub
-- Huggingface (todo)
+- HuggingFace
 
 ## Prerequisites
 1. The GitLab's URL instance (defaults to `https://gitlab.com/`)
@@ -33,5 +33,4 @@ See [config.example.json5](./config.example.json5) for how to configure.
 ## TODOs
 
 1. If repositories' array contains only excluded repositories, then sync all except the mentioned ones
-2. Add new source HuggingFace
-3. Add new source GitLab
+2. Add new source GitLab

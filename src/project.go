@@ -343,7 +343,7 @@ func (g *Project) GetWikiProject() *Project {
 			HttpUrl:       &dstRepoUrl,
 			ParentGroupID: -1,
 		},
-		SourceUsername: "",
+		SourceUsername: g.SourceUsername,
 		Source:         g.Source,
 		SourceRepository: sources.SourceRepository{
 			Name:        fmt.Sprintf("%s.wiki", g.SourceRepository.Name),

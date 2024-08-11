@@ -99,6 +99,18 @@
                 // Additional repositories can be specified here...
             ]
         },
+        {
+            "source": "huggingface",
+            "username": "ilsp",
+            "gitlab_group_id": 7107,
+            "config": {
+                "releases": {
+                    "assets": {
+                        "exclude": false,
+                    }
+                }
+            }
+        }
         // Additional groups can be specified here...
     ]
 }

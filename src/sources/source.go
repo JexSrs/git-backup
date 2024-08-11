@@ -6,15 +6,24 @@ const (
 )
 
 type Source interface {
-	Paginate(username string, page int) ([]SourceRepository, error)
+	Paginate(username string, prev *PaginationResponse) (*PaginationResponse, error)
 	GetWikiURL(username, repoName string) string
 	FetchReleases(username, repoName string) ([]SourceRelease, error)
 }
 
+type PaginationResponse struct {
+	Repositories []SourceRepository
+
+	NextPage   int
+	NextCursor *string
+
+	Metadata any
+}
+
 type SourceRepository struct {
-	Name        string  `json:"name"`
-	URL         string  `json:"clone_url"`
-	Description *string `json:"description"`
+	Name        string
+	URL         string
+	Description *string
 }
 
 type SourceRelease struct {
