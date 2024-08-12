@@ -3,12 +3,9 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/go-git/go-billy/v5/osfs"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
-	"github.com/go-git/go-git/v5/plumbing/cache"
-	"github.com/go-git/go-git/v5/storage/filesystem"
 	"main/src/sources"
 	"net/http"
 	"net/url"
@@ -194,11 +191,7 @@ func (g *Project) CloneFromSource() error {
 	path := g.GetDir()
 	os.RemoveAll(path)
 
-	// Create the local file system storage
-	fs := osfs.New(path)
-	storage := filesystem.NewStorage(fs, cache.NewObjectLRUDefault())
-
-	r, err := git.Clone(storage, fs, &git.CloneOptions{
+	r, err := git.PlainClone(path, false, &git.CloneOptions{
 		URL: g.SourceRepository.URL,
 	})
 
@@ -365,4 +358,8 @@ func (g *Project) GetWikiProject() *Project {
 			Description: nil,
 		},
 	}
+}
+
+func (g *Project) Prune() {
+	os.RemoveAll(g.GetDir())
 }

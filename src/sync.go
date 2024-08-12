@@ -63,6 +63,9 @@ func SyncUser(gitlab *GitLab, dufs *Dufs, sourceCfg ConfigRepo, groupCfg ConfigG
 				fmt.Println(err)
 			}
 
+			// Close project and delete any allocated storage
+			prj.Prune()
+
 			count++
 		}
 
@@ -175,6 +178,9 @@ func SyncRepo(prj *Project) error {
 					return err
 				}
 			}
+
+			// Close project and delete any allocated storage
+			wikiPrj.Prune()
 		}
 	}
 
