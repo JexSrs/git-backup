@@ -5,6 +5,7 @@ import (
 	"main/src/sources"
 	"main/src/utils"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -35,6 +36,7 @@ func SyncUser(gitlab *GitLab, dufs *Dufs, sourceCfg ConfigRepo, groupCfg ConfigG
 
 			if groupCfg.Skip != nil && *groupCfg.Skip >= count {
 				fmt.Printf("Skipping repository %s: from --skip\n", remote.Name)
+				count++
 				continue
 			}
 
@@ -214,8 +216,8 @@ func SyncRepo(prj *Project) error {
 
 					if !*prj.Config.Releases.Assets.Exclude {
 						fmt.Println("      - Downloading...")
-						filepath := fmt.Sprintf("/tmp/git-backup/%s", asset.Name)
-						if err := utils.DownloadAsset(asset.BrowserDownloadUrl, filepath); err != nil {
+						assetPath := filepath.Join(prj.GetDir(), "assets__", asset.Name)
+						if err := utils.DownloadAsset(asset.BrowserDownloadUrl, assetPath); err != nil {
 							return err
 						}
 
@@ -225,7 +227,7 @@ func SyncRepo(prj *Project) error {
 						if maxSize != "none" {
 							maxSizeBytes := utils.ConvertToBytes(maxSize)
 
-							size, err := utils.GetFileSize(filepath)
+							size, err := utils.GetFileSize(assetPath)
 							if err != nil {
 								return err
 							}
@@ -233,7 +235,7 @@ func SyncRepo(prj *Project) error {
 							fmt.Printf("      - Size: %s\n", utils.ConvertFromBytes(size))
 							if size >= maxSizeBytes {
 								fmt.Printf("      - Asset %s exceeds the maximum size of %s\n", asset.Name, maxSize)
-								if err := os.Remove(filepath); err != nil {
+								if err := os.Remove(assetPath); err != nil {
 									return err
 								}
 
@@ -251,14 +253,14 @@ func SyncRepo(prj *Project) error {
 								strings.ReplaceAll(asset.Name, "/", "-"),
 							)
 
-							if err := prj.DestinationStorage.UploadFIle(filepath, assetURL); err != nil {
+							if err := prj.DestinationStorage.UploadFIle(assetPath, assetURL); err != nil {
 								return err
 							}
 
 							assetURL = prj.DestinationStorage.URL.JoinPath(assetURL).String()
 
 							// Delete file after upload
-							if err := os.Remove(filepath); err != nil {
+							if err := os.Remove(assetPath); err != nil {
 								return err
 							}
 						}

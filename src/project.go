@@ -3,14 +3,17 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/go-git/go-billy/v5/memfs"
+	"github.com/go-git/go-billy/v5/osfs"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
-	"github.com/go-git/go-git/v5/storage/memory"
+	"github.com/go-git/go-git/v5/plumbing/cache"
+	"github.com/go-git/go-git/v5/storage/filesystem"
 	"main/src/sources"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -188,7 +191,14 @@ func (g *Project) UnprotectBranch(name string) error {
 }
 
 func (g *Project) CloneFromSource() error {
-	r, err := git.Clone(memory.NewStorage(), memfs.New(), &git.CloneOptions{
+	path := g.GetDir()
+	os.RemoveAll(path)
+
+	// Create the local file system storage
+	fs := osfs.New(path)
+	storage := filesystem.NewStorage(fs, cache.NewObjectLRUDefault())
+
+	r, err := git.Clone(storage, fs, &git.CloneOptions{
 		URL: g.SourceRepository.URL,
 	})
 
@@ -310,6 +320,10 @@ func (g *Project) CreateRelease(release sources.SourceRelease) error {
 	}
 
 	return nil
+}
+
+func (g *Project) GetDir() string {
+	return filepath.Join("/tmp/git-backup/", g.SourceUsername, g.SourceRepository.Name)
 }
 
 func (g *Project) LinkAsset(tagName, assetName, assetUrl string) error {

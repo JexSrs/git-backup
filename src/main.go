@@ -57,9 +57,9 @@ func main() {
 			log.Fatalf("source %s not found", configRepo.Source)
 		}
 
-		fmt.Println("\n==========================")
+		fmt.Println("\n================================================")
 		fmt.Printf("Evaluating group %s from %s\n", configRepo.Username, configRepo.Source)
-		fmt.Println("==========================")
+		fmt.Println("================================================")
 
 		SyncUser(gitlab, dufs, configSource, configRepo, source)
 	}
