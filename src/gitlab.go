@@ -69,9 +69,28 @@ func (g *GitLab) Request(method, path string, data []byte) (*Response, error) {
 	}, nil
 }
 
+func (g *GitLab) IsValidName(name string) bool {
+	// Rule 1: can only include non-accented letters, digits, '_', '-', and '.'
+	validChars := regexp.MustCompile(`^[a-zA-Z0-9_.-]+$`)
+	if !validChars.MatchString(name) {
+		return false
+	}
+
+	// Rule 2: should not start/end with '-'
+	if strings.HasPrefix(name, "-") || strings.HasSuffix(name, "-") {
+		return false
+	}
+
+	// Rule 3: should not start/end with "." and end in ".git", or ".atom"
+	if strings.HasPrefix(name, ".") || strings.HasSuffix(name, ".") || strings.HasSuffix(name, ".git") || strings.HasSuffix(name, ".atom") {
+		return false
+	}
+
+	return true
+}
+
 func (g *GitLab) IsReservedName(name string) bool {
 	rn := []string{
-		".github",
 		"badges",
 		"blame",
 		"blob",
@@ -100,24 +119,4 @@ func (g *GitLab) IsReservedName(name string) bool {
 		}
 	}
 	return false
-}
-
-func (g *GitLab) IsValidName(name string) bool {
-	// Rule 1: can only include non-accented letters, digits, '_', '-', and '.'
-	validChars := regexp.MustCompile(`^[a-zA-Z0-9_.-]+$`)
-	if !validChars.MatchString(name) {
-		return false
-	}
-
-	// Rule 2: should not start with '-'
-	if strings.HasPrefix(name, "-") || strings.HasSuffix(name, "-") {
-		return false
-	}
-
-	// Rule 3: should not end in ".", ".git", or ".atom"
-	if strings.HasSuffix(name, ".") || strings.HasSuffix(name, ".git") || strings.HasSuffix(name, ".atom") {
-		return false
-	}
-
-	return true
 }

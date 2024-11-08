@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"main/src/sources"
 	"main/src/utils"
+	"strings"
 )
 
 type Configuration struct {
@@ -28,6 +29,7 @@ type ConfigDufs struct {
 type ConfigSources struct {
 	GitHub      *ConfigSourcesGitHub      `json:"github"`
 	HuggingFace *ConfigSourcesHuggingFace `json:"huggingface"`
+	Gitlab      *ConfigSourcesGitlab      `json:"gitlab"`
 }
 
 type ConfigSourcesGitHub struct {
@@ -36,6 +38,11 @@ type ConfigSourcesGitHub struct {
 }
 
 type ConfigSourcesHuggingFace struct {
+	Token  string     `json:"token"`
+	Config ConfigRepo `json:"config"`
+}
+
+type ConfigSourcesGitlab struct {
 	Token  string     `json:"token"`
 	Config ConfigRepo `json:"config"`
 }
@@ -71,26 +78,29 @@ type ConfigGroup struct {
 	Skip   *int       `json:"skip"`
 	Config ConfigRepo `json:"config"`
 
+	IncludeOnly  []string                     `json:"include_only"`
+	Exclude      []string                     `json:"exclude"`
 	Repositories []ConfigRepositoryRepository `json:"repositories"`
 }
 
-func (c *ConfigGroup) GetConfig(repoName string) *ConfigRepositoryRepository {
+func (c *ConfigGroup) GetConfig(name string) ConfigRepo {
+	cfg := c.Config
 	if len(c.Repositories) > 0 {
+		nameLower := strings.ToLower(name)
 		for _, repo := range c.Repositories {
-			if repo.Name == repoName {
-				return &repo
+			if strings.ToLower(repo.Name) == nameLower {
+				return repo.ConfigRepo
 			}
 		}
 	}
 
-	return nil
+	return cfg
 }
 
 type ConfigRepositoryRepository struct {
 	ConfigRepo
 
-	Name    string `json:"name"`
-	Exclude *bool  `json:"exclude"`
+	Name string `json:"name"`
 }
 
 func (c *Configuration) PopulateDefault() {
@@ -123,6 +133,10 @@ func (c *Configuration) PopulateDefault() {
 		c.Sources.HuggingFace.Config.DefaultFrom(c.Config)
 	}
 
+	if c.Sources.Gitlab != nil {
+		c.Sources.Gitlab.Config.DefaultFrom(c.Config)
+	}
+
 	for i := range c.Groups {
 		group := &c.Groups[i]
 
@@ -134,15 +148,15 @@ func (c *Configuration) PopulateDefault() {
 			group.Config.DefaultFrom(c.Sources.GitHub.Config)
 		} else if group.Source == sources.HuggingFaceID {
 			group.Config.DefaultFrom(c.Sources.HuggingFace.Config)
+		} else if group.Source == sources.GitlabID {
+			group.Config.DefaultFrom(c.Sources.Gitlab.Config)
 		}
+
+		group.IncludeOnly = nil
+		group.Exclude = nil
 
 		for j := range group.Repositories {
 			repo := &group.Repositories[j]
-
-			if repo.Exclude == nil {
-				repo.Exclude = utils.Pointer(false)
-			}
-
 			repo.ConfigRepo.DefaultFrom(group.Config)
 		}
 	}
@@ -183,6 +197,10 @@ func (c *Configuration) Validate() error {
 		} else if repo.Source == sources.HuggingFaceID {
 			if c.Sources.HuggingFace == nil {
 				return fmt.Errorf("huggingface source is missing")
+			}
+		} else if repo.Source == sources.GitlabID {
+			if c.Sources.Gitlab == nil {
+				return fmt.Errorf("gitlab source is missing")
 			}
 		} else {
 			return fmt.Errorf("source %s is not valid at index %d", repo.Source, i)

@@ -11,6 +11,8 @@ import (
 
 type HuggingFace struct {
 	Token string
+
+	client *http.Client
 }
 
 type HuggingFaceRepository struct {
@@ -22,31 +24,50 @@ type HuggingFaceMetadata struct {
 }
 
 func NewHuggingFace(token string) *HuggingFace {
-	return &HuggingFace{Token: token}
+	return &HuggingFace{
+		Token:  token,
+		client: &http.Client{},
+	}
 }
 
 func (g *HuggingFace) Paginate(username string, prev *PaginationResponse) (*PaginationResponse, error) {
 	if prev == nil {
-		prev = &PaginationResponse{
-			Metadata: HuggingFaceMetadata{
-				What: "models",
-			},
-		}
+		prev = &PaginationResponse{Metadata: HuggingFaceMetadata{What: "models"}}
 	}
 
 	meta := prev.Metadata.(HuggingFaceMetadata)
 
-	urlPath := ""
-	if meta.What == "models" {
-		urlPath = fmt.Sprintf("https://huggingface.co/api/models?author=%s&limit=100", username)
-	} else if meta.What == "datasets" {
-		urlPath = fmt.Sprintf("https://huggingface.co/api/datasets?author=%s&limit=100", username)
-	}
-
+	var res *PaginationResponse
+	var err error
 	if prev.NextCursor != nil {
-		urlPath = *prev.NextCursor
+		res, err = g.getItems(*prev.NextCursor)
+	} else {
+		if meta.What == "models" {
+			res, err = g.getItems(fmt.Sprintf("https://huggingface.co/api/models?author=%s&limit=100", username))
+			if err != nil {
+				return nil, err
+			}
+
+			// If finished models, go to datasets
+			if len(res.Repositories) == 0 {
+				meta.What = "datasets"
+			}
+		}
+
+		if meta.What == "datasets" {
+			res, err = g.getItems(fmt.Sprintf("https://huggingface.co/api/datasets?author=%s&limit=100", username))
+		}
 	}
 
+	if err != nil {
+		return nil, err
+	}
+
+	res.Metadata = meta
+	return res, nil
+}
+
+func (g *HuggingFace) getItems(urlPath string) (*PaginationResponse, error) {
 	req, err := http.NewRequest(http.MethodGet, urlPath, nil)
 	if err != nil {
 		return nil, fmt.Errorf("error creating request: %v", err)
@@ -56,18 +77,17 @@ func (g *HuggingFace) Paginate(username string, prev *PaginationResponse) (*Pagi
 		req.Header.Set("Authorization", "Bearer "+g.Token)
 	}
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := g.client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("error making request: %v", err)
 	}
 	defer resp.Body.Close()
 
-	nextCursor := extractLink(resp.Header.Get("Link"))
-
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("received non-200 status code: %d", resp.StatusCode)
 	}
+
+	nextCursor := extractLink(resp.Header.Get("Link"))
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -85,20 +105,14 @@ func (g *HuggingFace) Paginate(username string, prev *PaginationResponse) (*Pagi
 			Name:        strings.Split(repo.ID, "/")[1],
 			Description: nil,
 			URL:         fmt.Sprintf("https://huggingface.co/%s.git", repo.ID),
+			Private:     false,
 		})
-	}
-
-	// If finished models, go to datasets
-	if len(repos) == 0 && meta.What == "models" {
-		meta.What = "datasets"
-		prev.Metadata = meta
-		return g.Paginate(username, prev)
 	}
 
 	return &PaginationResponse{
 		Repositories: repos,
 		NextCursor:   &nextCursor,
-		Metadata:     meta,
+		Metadata:     nil,
 	}, nil
 }
 
@@ -108,6 +122,11 @@ func (g *HuggingFace) GetWikiURL(username, repoName string) string {
 
 func (g *HuggingFace) FetchReleases(username, repoName string) ([]SourceRelease, error) {
 	return nil, nil
+}
+
+func (g *HuggingFace) AddTokenToCloneUrl(url string) string {
+	// TODO
+	return url
 }
 
 func extractLink(h string) string {

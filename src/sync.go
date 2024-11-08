@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/pkg/errors"
 	"main/src/sources"
 	"main/src/utils"
 	"os"
@@ -9,7 +10,11 @@ import (
 	"strings"
 )
 
-func SyncUser(gitlab *GitLab, dufs *Dufs, sourceCfg ConfigRepo, groupCfg ConfigGroup, source sources.Source) {
+func SyncUser(gitlab *GitLab, dufs *Dufs, groupCfg ConfigGroup, source sources.Source) {
+	fmt.Println("\n================================================")
+	fmt.Printf("Evaluating group %s from %s\n", groupCfg.Username, groupCfg.Source)
+	fmt.Println("================================================")
+
 	count := 1
 
 	result, err := source.Paginate(groupCfg.Username, nil)
@@ -40,31 +45,27 @@ func SyncUser(gitlab *GitLab, dufs *Dufs, sourceCfg ConfigRepo, groupCfg ConfigG
 				continue
 			}
 
-			// Find configuration for that repo
-			cfg := sourceCfg // Default to source's config
-			if len(groupCfg.Repositories) > 0 {
-				cf := groupCfg.GetConfig(remote.Name)
-				if cf != nil {
-					cfg = cf.ConfigRepo
+			if groupCfg.IncludeOnly != nil && !utils.ContainsIgnoreCase(groupCfg.IncludeOnly, remote.Name) {
+				fmt.Printf("Skipping repository %s: from --include-only\n", remote.Name)
+				continue
+			}
 
-					if *cf.Exclude {
-						fmt.Printf("Skipping repository %s: from --exclude\n", remote.Name)
-						continue
-					}
-				} else {
-					fmt.Printf("Skipping repository %s: from --include-only\n", remote.Name)
-					continue
-				}
+			if groupCfg.Exclude != nil && utils.ContainsIgnoreCase(groupCfg.Exclude, remote.Name) {
+				fmt.Printf("Skipping repository %s: from --exclude\n", remote.Name)
+				continue
 			}
 
 			fmt.Printf("\n%d. Evaluating repository %s\n", count, remote.Name)
+			cfg := groupCfg.GetConfig(remote.Name)
 			prj := NewProject(gitlab, dufs, *groupCfg.GitLabGroupID, source, groupCfg.Username, remote, cfg)
 			if err := SyncRepo(prj); err != nil {
 				fmt.Println(err)
 			}
 
 			// Close project and delete any allocated storage
-			prj.Prune()
+			if err := prj.Prune(); err != nil {
+				fmt.Println(errors.Wrap(err, "failed to prune project"))
+			}
 
 			count++
 		}
@@ -76,73 +77,73 @@ func SyncUser(gitlab *GitLab, dufs *Dufs, sourceCfg ConfigRepo, groupCfg ConfigG
 func SyncRepo(prj *Project) error {
 	repoID, err := prj.RetrieveExistingRepo()
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failed to retrieve existing repo")
 	}
 
 	// Sync repository
 	if repoID == -1 {
-		fmt.Println("- Importing new repository in GitLab...")
+		fmt.Println("- Repository does not exist in GitLab...")
 		repoID, err = prj.Import()
 		if err != nil {
-			return err
+			return errors.Wrap(err, "failed to import project")
 		}
 		fmt.Println("- Importing new repository in GitLab with project ID:", repoID)
 
-		fmt.Println("- Create 'original_url' attribute with value:" + prj.SourceRepository.URL)
+		fmt.Println("- Create 'original_url' attribute with value:", prj.SourceRepository.URL)
 		err = prj.SetOriginalURL()
 		if err != nil {
-			return err
+			return errors.Wrap(err, "failed to set original url")
 		}
 
 		fmt.Println("- Waiting for repository import to finish...")
 		err = prj.LockUntilImport()
 		if err != nil {
-			return err
+			return errors.Wrap(err, "failed to read import status")
 		}
 
 		protectedBranches, err := prj.GetProtectedBranches()
-		fmt.Printf("- Found %d protected branches\n", len(protectedBranches))
 		if err != nil {
-			return err
+			return errors.Wrap(err, "failed to get list of protected branches")
 		}
+		fmt.Printf("- Found %d protected branches\n", len(protectedBranches))
 
 		fmt.Println("  - Unprotecting branches...")
 		for _, branch := range protectedBranches {
 			fmt.Printf("    - Unprotecting %s...\n", branch)
 			err = prj.UnprotectBranch(branch)
 			if err != nil {
-				return err
+				return errors.Wrapf(err, "failed to unprotect branch %s", branch)
 			}
 		}
 	} else {
 		fmt.Println("- Repository already exists in GitLab with project ID:", repoID)
-		fmt.Println("- Cloning repository from GitLab...")
+		fmt.Println("- Cloning repository from source...")
 		if err := prj.CloneFromSource(); err != nil {
-			return err
+			return errors.Wrap(err, "failed to clone source")
 		}
 
 		fmt.Println("- Adding GitLab as a remote repository..")
 		if err := prj.AddRemoteToRepo(); err != nil {
-			return err
+			return errors.Wrap(err, "failed to add GitLab as a remote repository")
 		}
 
 		fmt.Println("- Pushing branches to GitLab...")
 		branches, err := prj.GetBranches()
 		if err != nil {
-			return err
+			return errors.Wrap(err, "failed to retrieve branches")
 		}
 
 		fmt.Printf("  - Found %d branches\n", len(branches))
 		for _, branch := range branches {
 			fmt.Printf("  - Pushing %s...\n", branch)
 			if err := prj.PushBranch(branch); err != nil {
-				return err
+				return errors.Wrapf(err, "failed to sync branch %s", branch)
 			}
 		}
 
 		fmt.Println("- Pushing tags to GitLab...")
 		if err := prj.PushAllTags(); err != nil {
-			return err
+			return errors.Wrap(err, "failed to sync tags")
 		}
 	}
 
@@ -151,36 +152,37 @@ func SyncRepo(prj *Project) error {
 		fmt.Println("- Checking for source Wiki...")
 		wikiPrj := prj.GetWikiProject()
 		if len(wikiPrj.SourceRepository.URL) == 0 {
-			fmt.Println("  - WiKi is not supported...")
+			fmt.Println("  - Source does not support WiKi repository...")
 		} else {
 			if err := wikiPrj.CloneFromSource(); err == nil {
 				fmt.Println("  - Found remote Wiki, syncing...")
 				if err := wikiPrj.AddRemoteToRepo(); err != nil {
-					return err
+					return errors.Wrap(err, "failed to add GitLab as a remote repository in wiki")
 				}
 
 				fmt.Println("  - Pushing branches to GitLab...")
 				branches, err := wikiPrj.GetBranches()
 				if err != nil {
-					return err
+					return errors.Wrap(err, "failed to retrieve branches in wiki")
 				}
 
 				fmt.Printf("    - Found %d branches\n", len(branches))
 				for _, branch := range branches {
 					fmt.Printf("    - Pushing %s...\n", branch)
 					if err := wikiPrj.PushBranch(branch); err != nil {
-						return err
+						return errors.Wrapf(err, "failed to sync branch %s in wiki", branch)
 					}
 				}
 
 				fmt.Println("  - Pushing tags to GitLab...")
 				if err := wikiPrj.PushAllTags(); err != nil {
-					return err
+					return errors.Wrap(err, "failed to sync tags in wiki")
 				}
 			}
 
-			// Close project and delete any allocated storage
-			wikiPrj.Prune()
+			if err := prj.Prune(); err != nil {
+				return errors.Wrap(err, "failed to prune wiki project")
+			}
 		}
 	}
 
@@ -189,7 +191,7 @@ func SyncRepo(prj *Project) error {
 		fmt.Println("- Fetching source releases...")
 		releases, err := prj.Source.FetchReleases(prj.SourceUsername, prj.SourceRepository.Name)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "failed to fetch releases")
 		}
 
 		if releases == nil {
@@ -200,7 +202,7 @@ func SyncRepo(prj *Project) error {
 				fmt.Printf("  - Evaluating release %s...\n", release.TagName)
 				exists, err := prj.ReleaseExists(release.TagName)
 				if err != nil {
-					return err
+					return errors.Wrapf(err, "failed to check for release")
 				}
 
 				if exists {
@@ -210,7 +212,7 @@ func SyncRepo(prj *Project) error {
 
 				fmt.Println("    - Release does not exist, creating...")
 				if err := prj.CreateRelease(release); err != nil {
-					return err
+					return errors.Wrap(err, "failed to create release")
 				}
 
 				fmt.Printf("    - Found %d assets\n", len(release.Assets))
@@ -224,7 +226,7 @@ func SyncRepo(prj *Project) error {
 						fmt.Println("      - Downloading...")
 						assetPath := filepath.Join(prj.GetDir(), "assets__", asset.Name)
 						if err := utils.DownloadAsset(asset.BrowserDownloadUrl, assetPath); err != nil {
-							return err
+							return errors.Wrap(err, "failed to download asset")
 						}
 
 						assetShouldBeUploaded := true
@@ -235,14 +237,14 @@ func SyncRepo(prj *Project) error {
 
 							size, err := utils.GetFileSize(assetPath)
 							if err != nil {
-								return err
+								return errors.Wrap(err, "failed to stat asset")
 							}
 
 							fmt.Printf("      - Size: %s\n", utils.ConvertFromBytes(size))
 							if size >= maxSizeBytes {
 								fmt.Printf("      - Asset %s exceeds the maximum size of %s\n", asset.Name, maxSize)
 								if err := os.Remove(assetPath); err != nil {
-									return err
+									return errors.Wrap(err, "failed to delete asset from local path")
 								}
 
 								assetShouldBeUploaded = false
@@ -260,14 +262,14 @@ func SyncRepo(prj *Project) error {
 							)
 
 							if err := prj.DestinationStorage.UploadFIle(assetPath, assetURL); err != nil {
-								return err
+								return errors.Wrap(err, "failed to upload asset")
 							}
 
 							assetURL = prj.DestinationStorage.URL.JoinPath(assetURL).String()
 
 							// Delete file after upload
 							if err := os.Remove(assetPath); err != nil {
-								return err
+								return errors.Wrap(err, "failed to delete asset from local path")
 							}
 						}
 					}
@@ -275,12 +277,11 @@ func SyncRepo(prj *Project) error {
 					// Link asset
 					fmt.Println("      - Linking asset to GitLab...")
 					if err := prj.LinkAsset(release.TagName, asset.Name, assetURL); err != nil {
-						return err
+						return errors.Wrap(err, "failed to link asset in gitlab")
 					}
 
 					fmt.Println("      - Done")
 				}
-
 			}
 		}
 	}

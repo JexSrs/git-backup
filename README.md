@@ -4,12 +4,10 @@ A go script to retrieve the public repositories from various sources and sync th
 It will retrieve and sync the following information for each public repo:
 - all the branches
 - all the tags
-- latest releases & assets
+- latest releases and assets
 - wiki
 
-Supported sources:
-- GitHub
-- HuggingFace
+Supported sources are: `GitHub`, `GitLab` and `HuggingFace`.
 
 ## Prerequisites
 1. The GitLab's URL instance (defaults to `https://gitlab.com/`)
@@ -29,8 +27,3 @@ docker compose up --build -d
 ## Configuration file
 
 See [config.example.json5](./config.example.json5) for how to configure.
-
-## TODOs
-
-1. If repositories' array contains only excluded repositories, then sync all except the mentioned ones
-2. Add new source GitLab

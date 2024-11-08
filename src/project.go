@@ -54,6 +54,8 @@ func NewProject(gitlab *GitLab, dufs *Dufs, groupId int, source sources.Source, 
 	}
 }
 
+// API Requests
+
 func (g *Project) RetrieveExistingRepo() (int, error) {
 	data := url.Values{}
 	data.Add("search", g.SourceRepository.Name)
@@ -93,7 +95,7 @@ func (g *Project) Import() (int, error) {
 	data := url.Values{}
 	data.Add("name", g.SourceRepository.Name)
 	data.Add("namespace_id", strconv.Itoa(g.DestinationRepository.ParentGroupID))
-	data.Add("import_url", g.SourceRepository.URL)
+	data.Add("import_url", g.Source.AddTokenToCloneUrl(g.SourceRepository.URL))
 
 	if g.SourceRepository.Description != nil {
 		data.Add("description", *g.SourceRepository.Description)
@@ -187,12 +189,68 @@ func (g *Project) UnprotectBranch(name string) error {
 	return err
 }
 
+func (g *Project) ReleaseExists(tagName string) (bool, error) {
+	tagNameEncoded := url.QueryEscape(tagName)
+	urlPath := fmt.Sprintf("/api/v4/projects/%d/releases/%s", *g.DestinationRepository.ID, tagNameEncoded)
+
+	body, err := g.Destination.Request(http.MethodGet, urlPath, nil)
+	if err != nil {
+		return false, fmt.Errorf("creating request: %w", err)
+	}
+
+	return body.Status != http.StatusNotFound, nil
+}
+
+func (g *Project) CreateRelease(release sources.SourceRelease) error {
+	data := url.Values{}
+	data.Add("name", release.Name)
+	data.Add("tag_name", release.TagName)
+	data.Add("description", release.Description)
+	data.Add("released_at", release.CreatedAt)
+
+	urlPath := fmt.Sprintf("/api/v4/projects/%d/releases", *g.DestinationRepository.ID)
+
+	body, err := g.Destination.Request(http.MethodPost, urlPath, []byte(data.Encode()))
+	if err != nil {
+		return fmt.Errorf("creating request: %w", err)
+	}
+
+	if body.Status != http.StatusCreated {
+		return fmt.Errorf("create release: status %d", body.Status)
+	}
+
+	return nil
+}
+
+func (g *Project) LinkAsset(tagName, assetName, assetUrl string) error {
+	encodedTagName := url.QueryEscape(tagName)
+
+	data := url.Values{}
+	data.Add("name", assetName)
+	data.Add("url", assetUrl)
+
+	urlPath := fmt.Sprintf("/api/v4/projects/%d/releases/%s/assets/links?%s", *g.DestinationRepository.ID, encodedTagName, data.Encode())
+
+	body, err := g.Destination.Request(http.MethodPost, urlPath, nil)
+	if err != nil {
+		return fmt.Errorf("creating request: %w", err)
+	}
+
+	if body.Status != http.StatusCreated {
+		return fmt.Errorf("create release: status %d", body.Status)
+	}
+
+	return nil
+}
+
+// Git Requests
+
 func (g *Project) CloneFromSource() error {
 	path := g.GetDir()
 	os.RemoveAll(path)
 
 	r, err := git.PlainClone(path, false, &git.CloneOptions{
-		URL: g.SourceRepository.URL,
+		URL: g.Source.AddTokenToCloneUrl(g.SourceRepository.URL),
 	})
 
 	if err != nil {
@@ -282,63 +340,7 @@ func (g *Project) PushAllTags() error {
 	return nil
 }
 
-func (g *Project) ReleaseExists(tagName string) (bool, error) {
-	tagNameEncoded := url.QueryEscape(tagName)
-	urlPath := fmt.Sprintf("/api/v4/projects/%d/releases/%s", *g.DestinationRepository.ID, tagNameEncoded)
-
-	body, err := g.Destination.Request(http.MethodGet, urlPath, nil)
-	if err != nil {
-		return false, fmt.Errorf("creating request: %w", err)
-	}
-
-	return body.Status != http.StatusNotFound, nil
-}
-
-func (g *Project) CreateRelease(release sources.SourceRelease) error {
-	data := url.Values{}
-	data.Add("name", release.Name)
-	data.Add("tag_name", release.TagName)
-	data.Add("description", release.Description)
-	data.Add("released_at", release.CreatedAt)
-
-	urlPath := fmt.Sprintf("/api/v4/projects/%d/releases", *g.DestinationRepository.ID)
-
-	body, err := g.Destination.Request(http.MethodPost, urlPath, []byte(data.Encode()))
-	if err != nil {
-		return fmt.Errorf("creating request: %w", err)
-	}
-
-	if body.Status != http.StatusCreated {
-		return fmt.Errorf("create release: status %d", body.Status)
-	}
-
-	return nil
-}
-
-func (g *Project) GetDir() string {
-	return filepath.Join("/tmp/git-backup/", g.SourceUsername, g.SourceRepository.Name)
-}
-
-func (g *Project) LinkAsset(tagName, assetName, assetUrl string) error {
-	encodedTagName := url.QueryEscape(tagName)
-
-	data := url.Values{}
-	data.Add("name", assetName)
-	data.Add("url", assetUrl)
-
-	urlPath := fmt.Sprintf("/api/v4/projects/%d/releases/%s/assets/links?%s", *g.DestinationRepository.ID, encodedTagName, data.Encode())
-
-	body, err := g.Destination.Request(http.MethodPost, urlPath, nil)
-	if err != nil {
-		return fmt.Errorf("creating request: %w", err)
-	}
-
-	if body.Status != http.StatusCreated {
-		return fmt.Errorf("create release: status %d", body.Status)
-	}
-
-	return nil
-}
+// Utils
 
 func (g *Project) GetWikiProject() *Project {
 	dstRepoUrl := fmt.Sprintf("%s/%s.wiki.git", g.Destination.URL.String(), *g.DestinationRepository.PathWithNamespace)
@@ -360,6 +362,10 @@ func (g *Project) GetWikiProject() *Project {
 	}
 }
 
-func (g *Project) Prune() {
-	os.RemoveAll(g.GetDir())
+func (g *Project) GetDir() string {
+	return filepath.Join("/tmp/git-backup/", g.SourceUsername, g.SourceRepository.Name)
+}
+
+func (g *Project) Prune() error {
+	return os.RemoveAll(g.GetDir())
 }

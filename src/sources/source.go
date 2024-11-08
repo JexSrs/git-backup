@@ -3,12 +3,14 @@ package sources
 const (
 	GitHubID      = "github"
 	HuggingFaceID = "huggingface"
+	GitlabID      = "gitlab"
 )
 
 type Source interface {
 	Paginate(username string, prev *PaginationResponse) (*PaginationResponse, error)
 	GetWikiURL(username, repoName string) string
 	FetchReleases(username, repoName string) ([]SourceRelease, error)
+	AddTokenToCloneUrl(url string) string
 }
 
 type PaginationResponse struct {
@@ -24,6 +26,7 @@ type SourceRepository struct {
 	Name        string
 	URL         string
 	Description *string
+	Private     bool
 }
 
 type SourceRelease struct {

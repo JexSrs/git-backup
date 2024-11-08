@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"github.com/yosuke-furukawa/json5/encoding/json5"
 	"log"
 	"main/src/sources"
@@ -12,13 +11,13 @@ import (
 func main() {
 	file, err := utils.OpenConfigFile()
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("Could not open configuration file:", err)
 	}
 
 	var config Configuration
 	err = json5.Unmarshal(file, &config)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("Could not parse configuration file:", err)
 	}
 
 	config.PopulateDefault()
@@ -38,29 +37,29 @@ func main() {
 		github = sources.NewGithub(config.Sources.GitHub.Token)
 	}
 
-	var huggingFaceModel *sources.HuggingFace
+	var huggingFace *sources.HuggingFace
 	if config.Sources.HuggingFace != nil {
-		huggingFaceModel = sources.NewHuggingFace(config.Sources.HuggingFace.Token)
+		huggingFace = sources.NewHuggingFace(config.Sources.HuggingFace.Token)
+	}
+
+	var sGitlab *sources.Gitlab
+	if config.Sources.Gitlab != nil {
+		sGitlab = sources.NewGitlab(config.Sources.Gitlab.Token)
 	}
 
 	for _, configRepo := range config.Groups {
 		var source sources.Source
-		var configSource ConfigRepo
 
 		if configRepo.Source == sources.GitHubID {
 			source = github
-			configSource = config.Sources.GitHub.Config
 		} else if configRepo.Source == sources.HuggingFaceID {
-			source = huggingFaceModel
-			configSource = config.Sources.HuggingFace.Config
+			source = huggingFace
+		} else if configRepo.Source == sources.GitlabID {
+			source = sGitlab
 		} else {
-			log.Fatalf("source %s not found", configRepo.Source)
+			log.Fatalf("source '%s' not found in group with username '%s'", configRepo.Source, configRepo.Username)
 		}
 
-		fmt.Println("\n================================================")
-		fmt.Printf("Evaluating group %s from %s\n", configRepo.Username, configRepo.Source)
-		fmt.Println("================================================")
-
-		SyncUser(gitlab, dufs, configSource, configRepo, source)
+		SyncUser(gitlab, dufs, configRepo, source)
 	}
 }
