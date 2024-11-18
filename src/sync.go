@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/pkg/errors"
+	"main/src/dest"
 	"main/src/sources"
 	"main/src/utils"
 	"os"
@@ -10,7 +11,7 @@ import (
 	"strings"
 )
 
-func SyncUser(gitlab *GitLab, dufs *Dufs, groupCfg ConfigGroup, source sources.Source) {
+func SyncUser(gitlab *dest.GitLab, dufs *dest.Dufs, groupCfg ConfigGroup, source sources.Source) {
 	fmt.Println("\n================================================")
 	fmt.Printf("Evaluating group %s from %s\n", groupCfg.Username, groupCfg.Source)
 	fmt.Println("================================================")
@@ -75,7 +76,14 @@ func SyncUser(gitlab *GitLab, dufs *Dufs, groupCfg ConfigGroup, source sources.S
 }
 
 func SyncRepo(prj *Project) error {
-	repoID, err := prj.RetrieveExistingRepo()
+	fmt.Println("- Retrieving repository parent group...")
+	groupId, err := prj.RetrieveParentGroup()
+	if err != nil {
+		return errors.Wrap(err, "failed to retrieve parent group")
+	}
+
+	fmt.Println("- Checking repository...")
+	repoID, err := prj.RetrieveExistingRepo(groupId)
 	if err != nil {
 		return errors.Wrap(err, "failed to retrieve existing repo")
 	}
@@ -83,7 +91,7 @@ func SyncRepo(prj *Project) error {
 	// Sync repository
 	if repoID == -1 {
 		fmt.Println("- Repository does not exist in GitLab...")
-		repoID, err = prj.Import()
+		repoID, err = prj.Import(groupId)
 		if err != nil {
 			return errors.Wrap(err, "failed to import project")
 		}
@@ -189,7 +197,7 @@ func SyncRepo(prj *Project) error {
 	// Sync Releases
 	if !*prj.Config.Releases.Exclude {
 		fmt.Println("- Fetching source releases...")
-		releases, err := prj.Source.FetchReleases(prj.SourceUsername, prj.SourceRepository.Name)
+		releases, err := prj.Source.FetchReleases(prj.SourceUsername, prj.SourceRepository)
 		if err != nil {
 			return errors.Wrap(err, "failed to fetch releases")
 		}
@@ -220,12 +228,12 @@ func SyncRepo(prj *Project) error {
 					fmt.Printf("    - Evaluating asset: %s\n", asset.Name)
 
 					// If asset is not downloaded, then set the original asset url
-					assetURL := asset.BrowserDownloadUrl
+					assetURL := asset.URL
 
 					if !*prj.Config.Releases.Assets.Exclude {
 						fmt.Println("      - Downloading...")
 						assetPath := filepath.Join(prj.GetDir(), "assets__", asset.Name)
-						if err := utils.DownloadAsset(asset.BrowserDownloadUrl, assetPath); err != nil {
+						if err := utils.DownloadAsset(asset.URL, assetPath); err != nil {
 							return errors.Wrap(err, "failed to download asset")
 						}
 

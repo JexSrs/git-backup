@@ -9,7 +9,7 @@ const (
 type Source interface {
 	Paginate(username string, prev *PaginationResponse) (*PaginationResponse, error)
 	GetWikiURL(username, repoName string) string
-	FetchReleases(username, repoName string) ([]SourceRelease, error)
+	FetchReleases(username string, repo SourceRepository) ([]SourceRelease, error)
 	AddTokenToCloneUrl(url string) string
 }
 
@@ -27,17 +27,22 @@ type SourceRepository struct {
 	URL         string
 	Description *string
 	Private     bool
+
+	ParentGroupPath []string
+
+	// Used by GitLab
+	ID int
 }
 
 type SourceRelease struct {
-	TagName     string        `json:"tag_name"`
-	Name        string        `json:"name"`
-	Description string        `json:"body"`
-	CreatedAt   string        `json:"created_at"`
-	Assets      []SourceAsset `json:"assets"`
+	Name        string
+	TagName     string
+	Description string
+	CreatedAt   string
+	Assets      []SourceAsset
 }
 
 type SourceAsset struct {
-	Name               string `json:"name"`
-	BrowserDownloadUrl string `json:"browser_download_url"`
+	Name string
+	URL  string
 }

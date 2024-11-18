@@ -27,3 +27,7 @@ docker compose up --build -d
 ## Configuration file
 
 See [config.example.json5](./config.example.json5) for how to configure.
+
+## TODOs
+
+1. If `gitlab_group_id` is not passed, fetch information from source and create group. Parent `group_id` will be required.

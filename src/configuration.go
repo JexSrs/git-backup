@@ -27,9 +27,9 @@ type ConfigDufs struct {
 // Sources configuration
 
 type ConfigSources struct {
-	GitHub      *ConfigSourcesGitHub      `json:"github"`
-	HuggingFace *ConfigSourcesHuggingFace `json:"huggingface"`
-	Gitlab      *ConfigSourcesGitlab      `json:"gitlab"`
+	GitHub      ConfigSourcesGitHub      `json:"github"`
+	HuggingFace ConfigSourcesHuggingFace `json:"huggingface"`
+	Gitlab      ConfigSourcesGitlab      `json:"gitlab"`
 }
 
 type ConfigSourcesGitHub struct {
@@ -125,17 +125,9 @@ func (c *Configuration) PopulateDefault() {
 		c.Groups = make([]ConfigGroup, 0)
 	}
 
-	if c.Sources.GitHub != nil {
-		c.Sources.GitHub.Config.DefaultFrom(c.Config)
-	}
-
-	if c.Sources.HuggingFace != nil {
-		c.Sources.HuggingFace.Config.DefaultFrom(c.Config)
-	}
-
-	if c.Sources.Gitlab != nil {
-		c.Sources.Gitlab.Config.DefaultFrom(c.Config)
-	}
+	c.Sources.GitHub.Config.DefaultFrom(c.Config)
+	c.Sources.HuggingFace.Config.DefaultFrom(c.Config)
+	c.Sources.Gitlab.Config.DefaultFrom(c.Config)
 
 	for i := range c.Groups {
 		group := &c.Groups[i]
@@ -185,24 +177,8 @@ func (c *Configuration) Validate() error {
 		return fmt.Errorf("dufs url is required")
 	}
 
-	if c.Sources.GitHub == nil && c.Sources.HuggingFace == nil {
-		return fmt.Errorf("at least one source is required")
-	}
-
 	for i, repo := range c.Groups {
-		if repo.Source == sources.GitHubID {
-			if c.Sources.GitHub == nil {
-				return fmt.Errorf("github source is missing")
-			}
-		} else if repo.Source == sources.HuggingFaceID {
-			if c.Sources.HuggingFace == nil {
-				return fmt.Errorf("huggingface source is missing")
-			}
-		} else if repo.Source == sources.GitlabID {
-			if c.Sources.Gitlab == nil {
-				return fmt.Errorf("gitlab source is missing")
-			}
-		} else {
+		if repo.Source != sources.GitHubID && repo.Source != sources.HuggingFaceID && repo.Source != sources.GitlabID {
 			return fmt.Errorf("source %s is not valid at index %d", repo.Source, i)
 		}
 

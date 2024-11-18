@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/yosuke-furukawa/json5/encoding/json5"
 	"log"
+	"main/src/dest"
 	"main/src/sources"
 	"main/src/utils"
 	"net/url"
@@ -27,33 +28,22 @@ func main() {
 	}
 
 	gitlabUrl, _ := url.Parse(*config.Gitlab.URL)
-	gitlab := NewGitLab(*gitlabUrl, *config.Gitlab.Token)
+	gitlab := dest.NewGitLab(*gitlabUrl, *config.Gitlab.Token)
 
 	dufsUrl, _ := url.Parse(*config.Dufs.URL)
-	dufs := NewDufs(*dufsUrl)
+	dufs := dest.NewDufs(*dufsUrl)
 
-	var github *sources.Github
-	if config.Sources.GitHub != nil {
-		github = sources.NewGithub(config.Sources.GitHub.Token)
-	}
-
-	var huggingFace *sources.HuggingFace
-	if config.Sources.HuggingFace != nil {
-		huggingFace = sources.NewHuggingFace(config.Sources.HuggingFace.Token)
-	}
-
-	var sGitlab *sources.Gitlab
-	if config.Sources.Gitlab != nil {
-		sGitlab = sources.NewGitlab(config.Sources.Gitlab.Token)
-	}
+	sGithub := sources.NewGithub(config.Sources.GitHub.Token)
+	sHuggingFace := sources.NewHuggingFace(config.Sources.HuggingFace.Token)
+	sGitlab := sources.NewGitlab(config.Sources.Gitlab.Token)
 
 	for _, configRepo := range config.Groups {
 		var source sources.Source
 
 		if configRepo.Source == sources.GitHubID {
-			source = github
+			source = sGithub
 		} else if configRepo.Source == sources.HuggingFaceID {
-			source = huggingFace
+			source = sHuggingFace
 		} else if configRepo.Source == sources.GitlabID {
 			source = sGitlab
 		} else {

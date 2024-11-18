@@ -32,7 +32,10 @@ func NewHuggingFace(token string) *HuggingFace {
 
 func (g *HuggingFace) Paginate(username string, prev *PaginationResponse) (*PaginationResponse, error) {
 	if prev == nil {
-		prev = &PaginationResponse{Metadata: HuggingFaceMetadata{What: "models"}}
+		prev = &PaginationResponse{
+			NextCursor: nil,
+			Metadata:   HuggingFaceMetadata{What: "models"},
+		}
 	}
 
 	meta := prev.Metadata.(HuggingFaceMetadata)
@@ -40,10 +43,10 @@ func (g *HuggingFace) Paginate(username string, prev *PaginationResponse) (*Pagi
 	var res *PaginationResponse
 	var err error
 	if prev.NextCursor != nil {
-		res, err = g.getItems(*prev.NextCursor)
+		res, err = g.fetchRepositories(*prev.NextCursor)
 	} else {
 		if meta.What == "models" {
-			res, err = g.getItems(fmt.Sprintf("https://huggingface.co/api/models?author=%s&limit=100", username))
+			res, err = g.fetchRepositories(fmt.Sprintf("https://huggingface.co/api/models?author=%s&limit=100", username))
 			if err != nil {
 				return nil, err
 			}
@@ -55,7 +58,7 @@ func (g *HuggingFace) Paginate(username string, prev *PaginationResponse) (*Pagi
 		}
 
 		if meta.What == "datasets" {
-			res, err = g.getItems(fmt.Sprintf("https://huggingface.co/api/datasets?author=%s&limit=100", username))
+			res, err = g.fetchRepositories(fmt.Sprintf("https://huggingface.co/api/datasets?author=%s&limit=100", username))
 		}
 	}
 
@@ -67,8 +70,8 @@ func (g *HuggingFace) Paginate(username string, prev *PaginationResponse) (*Pagi
 	return res, nil
 }
 
-func (g *HuggingFace) getItems(urlPath string) (*PaginationResponse, error) {
-	req, err := http.NewRequest(http.MethodGet, urlPath, nil)
+func (g *HuggingFace) fetchRepositories(cursor string) (*PaginationResponse, error) {
+	req, err := http.NewRequest(http.MethodGet, cursor, nil)
 	if err != nil {
 		return nil, fmt.Errorf("error creating request: %v", err)
 	}
@@ -120,7 +123,7 @@ func (g *HuggingFace) GetWikiURL(username, repoName string) string {
 	return ""
 }
 
-func (g *HuggingFace) FetchReleases(username, repoName string) ([]SourceRelease, error) {
+func (g *HuggingFace) FetchReleases(username string, repo SourceRepository) ([]SourceRelease, error) {
 	return nil, nil
 }
 

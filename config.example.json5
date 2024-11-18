@@ -4,6 +4,10 @@
         "url": "https://gitlab.com/", // URL of the GitLab instance; defaults to "https://gitlab.com/" when empty.
         "token": "" // Personal access token for GitLab user authentication.
     },
+    // Configuration settings for the destination dyfs server where assets will be saved.
+    "dufs": {
+        "url": "" // URL of the dufs instance
+    },
     // Global configuration that applies to all sourced groups and repositories unless specifically overridden locally.
     "config": {
         "wiki": {

@@ -6,6 +6,7 @@ import (
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
+	"main/src/dest"
 	"main/src/sources"
 	"net/http"
 	"net/url"
@@ -19,9 +20,9 @@ import (
 type Project struct {
 	Config ConfigRepo
 
-	Destination           *GitLab
+	Destination           *dest.GitLab
 	DestinationRepository *ProjectGitLab
-	DestinationStorage    *Dufs
+	DestinationStorage    *dest.Dufs
 
 	Source           sources.Source
 	SourceUsername   string
@@ -38,7 +39,12 @@ type ProjectGitLab struct {
 	ParentGroupID     int
 }
 
-func NewProject(gitlab *GitLab, dufs *Dufs, groupId int, source sources.Source, username string, sourceRepository sources.SourceRepository, config ConfigRepo) *Project {
+type ReqGroup struct {
+	ID   int    `json:"id"`
+	Name string `json:"name"`
+}
+
+func NewProject(gitlab *dest.GitLab, dufs *dest.Dufs, groupId int, source sources.Source, username string, sourceRepository sources.SourceRepository, config ConfigRepo) *Project {
 	return &Project{
 		Destination: gitlab,
 		DestinationRepository: &ProjectGitLab{
@@ -56,12 +62,98 @@ func NewProject(gitlab *GitLab, dufs *Dufs, groupId int, source sources.Source, 
 
 // API Requests
 
-func (g *Project) RetrieveExistingRepo() (int, error) {
+func (g *Project) RetrieveParentGroup() (int, error) {
+	groupId := g.DestinationRepository.ParentGroupID
+
+	path := g.SourceRepository.ParentGroupPath
+	if path != nil && len(path) != 0 {
+		for _, groupName := range path {
+			id, err := g.upsertGroup(groupId, groupName)
+			if err != nil {
+				return -1, err
+			}
+			groupId = id
+		}
+	}
+
+	return groupId, nil
+}
+
+func (g *Project) upsertGroup(parentGroupId int, groupName string) (int, error) {
+	// Check if the group already exists
+	groupId, err := g.getGroupIdByName(parentGroupId, groupName)
+	if err == nil {
+		return groupId, nil // Group exists, return its ID
+	}
+
+	// Group does not exist, create it
+	newGroupId, err := g.createGroup(parentGroupId, groupName)
+	if err != nil {
+		return -1, err
+	}
+	return newGroupId, nil
+}
+
+func (g *Project) getGroupIdByName(parentGroupId int, groupName string) (int, error) {
+	data := url.Values{}
+	data.Add("search", groupName)
+	data.Add("per_page", "100")
+
+	urlPath := fmt.Sprintf("/api/v4/groups/%d/subgroups?%s", parentGroupId, data.Encode())
+	body, err := g.Destination.Request(http.MethodGet, urlPath, nil)
+	if err != nil {
+		return -1, err
+	}
+
+	if body.Status == http.StatusNotFound {
+		return -1, nil
+	}
+
+	var groups []ReqGroup
+	err = json.Unmarshal(body.Body, &groups)
+	if err != nil {
+		return -1, err
+	}
+
+	for _, group := range groups {
+		if group.Name == groupName {
+			return group.ID, nil // Return the ID of the existing group
+		}
+	}
+
+	return -1, fmt.Errorf("group %s not found", groupName)
+}
+
+func (g *Project) createGroup(parentGroupId int, groupName string) (int, error) {
+	data := url.Values{}
+	data.Set("name", groupName)
+	data.Set("parent_id", fmt.Sprintf("%d", parentGroupId))
+
+	urlPath := fmt.Sprintf("/api/v4/groups?%s", data.Encode())
+	body, err := g.Destination.Request(http.MethodPost, urlPath, nil)
+	if err != nil {
+		return -1, err
+	}
+
+	if body.Status != http.StatusCreated {
+		return -1, fmt.Errorf("failed to create group %s", groupName)
+	}
+
+	var newGroup ReqGroup
+	err = json.Unmarshal(body.Body, &newGroup)
+	if err != nil {
+		return -1, err
+	}
+
+	return newGroup.ID, nil
+}
+
+func (g *Project) RetrieveExistingRepo(groupId int) (int, error) {
 	data := url.Values{}
 	data.Add("search", g.SourceRepository.Name)
 	data.Add("per_page", "100")
 
-	urlPath := fmt.Sprintf("/api/v4/groups/%d/projects?%s", g.DestinationRepository.ParentGroupID, data.Encode())
+	urlPath := fmt.Sprintf("/api/v4/groups/%d/projects?%s", groupId, data.Encode())
 	body, err := g.Destination.Request(http.MethodGet, urlPath, nil)
 	if err != nil {
 		return -1, err
@@ -91,10 +183,10 @@ func (g *Project) RetrieveExistingRepo() (int, error) {
 	return -1, nil
 }
 
-func (g *Project) Import() (int, error) {
+func (g *Project) Import(groupId int) (int, error) {
 	data := url.Values{}
 	data.Add("name", g.SourceRepository.Name)
-	data.Add("namespace_id", strconv.Itoa(g.DestinationRepository.ParentGroupID))
+	data.Add("namespace_id", strconv.Itoa(groupId))
 	data.Add("import_url", g.Source.AddTokenToCloneUrl(g.SourceRepository.URL))
 
 	if g.SourceRepository.Description != nil {

@@ -26,6 +26,19 @@ type GithubRepository struct {
 	Private     bool    `json:"private"`
 }
 
+type GithubRelease struct {
+	Name        string        `json:"name"`
+	TagName     string        `json:"tag_name"`
+	Description string        `json:"body"`
+	CreatedAt   string        `json:"created_at"`
+	Assets      []SourceAsset `json:"assets"`
+}
+
+type GithubAsset struct {
+	Name               string `json:"name"`
+	BrowserDownloadUrl string `json:"browser_download_url"`
+}
+
 func NewGithub(token string) *Github {
 	return &Github{
 		Token:  token,
@@ -34,12 +47,11 @@ func NewGithub(token string) *Github {
 }
 
 func (g *Github) Paginate(username string, prev *PaginationResponse) (*PaginationResponse, error) {
-	page := 1
-	if prev != nil {
-		page = prev.NextPage
+	if prev == nil {
+		prev = &PaginationResponse{NextPage: 1}
 	}
 
-	urlPath := fmt.Sprintf("https://api.github.com/search/repositories?q=user:%s&per_page=100&page=%d", username, page)
+	urlPath := fmt.Sprintf("https://api.github.com/search/repositories?q=user:%s&per_page=100&page=%d", username, prev.NextPage)
 
 	req, err := http.NewRequest(http.MethodGet, urlPath, nil)
 	if err != nil {
@@ -82,7 +94,7 @@ func (g *Github) Paginate(username string, prev *PaginationResponse) (*Paginatio
 
 	return &PaginationResponse{
 		Repositories: repos,
-		NextPage:     page + 1,
+		NextPage:     prev.NextPage + 1,
 	}, nil
 }
 
@@ -90,8 +102,8 @@ func (g *Github) GetWikiURL(username, repoName string) string {
 	return fmt.Sprintf("https://%s:x-oauth-basic@github.com/%s/%s.wiki.git", g.Token, username, repoName)
 }
 
-func (g *Github) FetchReleases(username, repoName string) ([]SourceRelease, error) {
-	urlPath := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases?per_page=10", username, repoName)
+func (g *Github) FetchReleases(username string, repo SourceRepository) ([]SourceRelease, error) {
+	urlPath := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases?per_page=10", username, repo.Name)
 
 	req, err := http.NewRequest(http.MethodGet, urlPath, nil)
 	if err != nil {
@@ -116,12 +128,31 @@ func (g *Github) FetchReleases(username, repoName string) ([]SourceRelease, erro
 		return nil, fmt.Errorf("error reading response body: %v", err)
 	}
 
-	repositories := make([]SourceRelease, 0)
-	if err := json.Unmarshal(body, &repositories); err != nil {
+	fetchedReleases := make([]GithubRelease, 0)
+	if err := json.Unmarshal(body, &fetchedReleases); err != nil {
 		return nil, fmt.Errorf("error decoding JSON to map: %v", err)
 	}
 
-	return utils.Reverse(repositories), nil
+	releases := make([]SourceRelease, len(fetchedReleases))
+	for i, rel := range fetchedReleases {
+		assets := make([]SourceAsset, len(rel.Assets))
+		for i, asset := range rel.Assets {
+			assets[i] = SourceAsset{
+				Name: asset.Name,
+				URL:  asset.URL,
+			}
+		}
+
+		releases[i] = SourceRelease{
+			Name:        rel.Name,
+			TagName:     rel.TagName,
+			Description: rel.Description,
+			CreatedAt:   rel.CreatedAt,
+			Assets:      assets,
+		}
+	}
+
+	return utils.Reverse(releases), nil
 }
 
 func (g *Github) AddTokenToCloneUrl(u string) string {
