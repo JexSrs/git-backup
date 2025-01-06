@@ -2,7 +2,9 @@ package utils
 
 import (
 	"fmt"
+	"net/url"
 	"os"
+	"path"
 	"strconv"
 	"strings"
 )
@@ -48,7 +50,7 @@ func ConvertToBytes(sizeString string) int64 {
 }
 
 // ConvertFromBytes converts an integer byte count into a human-readable string with units.
-func ConvertFromBytes(bytes int64) string {
+func ConvertFromBytes(bytes int) string {
 	const unit = 1024
 	if bytes < unit {
 		return fmt.Sprintf("%dB", bytes)
@@ -61,4 +63,15 @@ func ConvertFromBytes(bytes int64) string {
 	value := float64(bytes) / float64(div)
 	units := []string{"KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"}
 	return fmt.Sprintf("%.1f%s", value, units[exp])
+}
+
+func ExtractExtension(fpath string) string {
+	parsedURL, err := url.Parse(fpath)
+	if err != nil {
+		return ""
+	}
+
+	filePath := parsedURL.Path
+	ext := path.Ext(filePath)
+	return strings.TrimPrefix(ext, ".")
 }

@@ -3,6 +3,7 @@ package dest
 import (
 	"bytes"
 	"io"
+	"main/src/configuration"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -14,10 +15,12 @@ type GitLab struct {
 	APIToken string
 }
 
-func NewGitLab(url url.URL, apiToken string) *GitLab {
+func NewGitLab(config configuration.ConfigGitLab) *GitLab {
+	gitlabUrl, _ := url.Parse(*config.URL)
+
 	return &GitLab{
-		URL:      url,
-		APIToken: apiToken,
+		URL:      *gitlabUrl,
+		APIToken: *config.Token,
 	}
 }
 
@@ -26,7 +29,7 @@ type Response struct {
 	Body   []byte
 }
 
-func (g *GitLab) Request(method, path string, data []byte) (*Response, error) {
+func (g *GitLab) Request(method, path string, data *bytes.Buffer) (*Response, error) {
 	pathQuery := strings.Split(path, "?")
 
 	urlPath := g.URL.JoinPath(pathQuery[0])
@@ -38,8 +41,10 @@ func (g *GitLab) Request(method, path string, data []byte) (*Response, error) {
 	var err error
 
 	if data != nil {
-		req, err = http.NewRequest(method, urlPath.String(), bytes.NewBuffer(data))
-		req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+		req, err = http.NewRequest(method, urlPath.String(), data)
+		if len(req.Header.Get("Content-Type")) == 0 {
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		}
 	} else {
 		req, err = http.NewRequest(method, urlPath.String(), nil)
 	}
@@ -70,8 +75,8 @@ func (g *GitLab) Request(method, path string, data []byte) (*Response, error) {
 }
 
 func (g *GitLab) IsValidName(name string) bool {
-	// Rule 1: can only include non-accented letters, digits, '_', '-', and '.'
-	validChars := regexp.MustCompile(`^[a-zA-Z0-9_.-]+$`)
+	// Rule 1: can only include letters, digits, spaces, '_', '-', and '.'
+	validChars := regexp.MustCompile(`^[a-zA-Z0-9_. -]+$`)
 	if !validChars.MatchString(name) {
 		return false
 	}

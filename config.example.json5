@@ -10,6 +10,9 @@
     },
     // Global configuration that applies to all sourced groups and repositories unless specifically overridden locally.
     "config": {
+        // Determines whether to fetch the repository's avatar (true) or not (false); defaults to true
+        // Applicable only for gitlab sources
+        "fetch_avatar": true,
         "wiki": {
             // Determines whether wiki syncing is excluded (true) or included (false); defaults to false
             "exclude": false
@@ -26,44 +29,42 @@
         }
     },
     // Defines the source platforms from which repositories will be synced.
-    "sources": {
-        "github": {
+    "sources": [
+        {
+            "id": "github",
             "token": "", // Personal access token for GitHub user authentication.
             // Overrides global configuration for GitHub-sourced repositories, if specified.
             "config": {/*...*/}
         },
-        "huggingface": {
+        {
+            "id": "huggingface",
             "token": "", // Personal access token for HuggingFace user authentication.
             // Overrides global configuration for HuggingFace-sourced repositories, if specified.
             "config": {/*...*/}
         },
-        "gitlab": {
+        {
+            "id": "gitlab",
+            "token": "", // Personal access token for GitLab user authentication.
+            // Overrides global configuration for GitLab-sourced repositories, if specified.
+            "config": {/*...*/}
+        },
+        {
+            "id": "gitlab-custom-1", // Prefix "gitlab" + anything else (must be unique)
+            "base_url": "https://gitlab.example.com", // The base url of the gitlab instance
             "token": "", // Personal access token for GitLab user authentication.
             // Overrides global configuration for GitLab-sourced repositories, if specified.
             "config": {/*...*/}
         }
-    },
+    ],
     // Configuration for specific groups of repositories
     "groups": [
         {
-            "source": "github", // Indicates the source platform: either "github", "huggingface" or "gitlab".
+            "source": "github", // Indicates the source platform: either "github", "gitlab" or "huggingface".
             "username": "opensearch-project", // Username of the group in the source platform.
             "gitlab_group_id": 1227, // Parent GitLab group ID where the repositories will be saved.
-            // Local overriding configuration specific to this group.
             "include_only": ["OpenSearch"], // If set, only specified repositories will be synced.
-            "config": {
-                "wiki": {
-                    "exclude": true
-                },
-                "releases": {
-                    "exclude": true,
-                    "assets": {
-                        "exclude": true,
-                        "threshold": 5,
-                        "max_size": "1GB"
-                    }
-                }
-            },
+            // Local overriding configuration specific to this group.
+            "config": {/*...*/},
             // Configuration of specific repositories. If empty, will use group's configuration.
             "repositories": [
                 {
@@ -89,13 +90,6 @@
             "username": "ilsp",
             "gitlab_group_id": 7107,
             "exclude": [""], // If set, will exclude all mentioned repositories
-            "config": {
-                "releases": {
-                    "assets": {
-                        "exclude": false,
-                    }
-                }
-            }
         }
         // Additional groups can be specified here...
     ]

@@ -1,11 +1,5 @@
 package sources
 
-const (
-	GitHubID      = "github"
-	HuggingFaceID = "huggingface"
-	GitlabID      = "gitlab"
-)
-
 type Source interface {
 	Paginate(username string, prev *PaginationResponse) (*PaginationResponse, error)
 	GetWikiURL(username, repoName string) string
@@ -26,7 +20,9 @@ type SourceRepository struct {
 	Name        string
 	URL         string
 	Description *string
+	Avatar      *string
 	Private     bool
+	Archived    bool
 
 	ParentGroupPath []string
 

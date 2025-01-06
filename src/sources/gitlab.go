@@ -16,9 +16,10 @@ type Gitlab struct {
 }
 
 type GitlabGroup struct {
-	ID   int    `json:"id"`
-	Name string `json:"name"`
-	Path string `json:"path"`
+	ID     int     `json:"id"`
+	Name   string  `json:"name"`
+	Path   string  `json:"path"`
+	Avatar *string `json:"avatar_url"`
 
 	ParentID int
 }
@@ -27,8 +28,10 @@ type GitlabRepository struct {
 	ID          int     `json:"id"`
 	Name        string  `json:"name"`
 	Description *string `json:"description"`
+	Avatar      *string `json:"avatar_url"`
 	HttpUrl     string  `json:"http_url_to_repo"`
 	Visibility  string  `json:"visibility"`
+	Archived    bool    `json:"archived"`
 }
 
 type GitlabRelease struct {
@@ -59,8 +62,8 @@ type GitlabMetadata struct {
 	VisitedGroupIDs      map[int]bool
 }
 
-func NewGitlab(token string) *Gitlab {
-	u, _ := url.Parse("https://gitlab.com")
+func NewGitlab(baseUrl, token string) *Gitlab {
+	u, _ := url.Parse(baseUrl)
 
 	return &Gitlab{
 		URL:    *u,
@@ -213,7 +216,9 @@ func (g *Gitlab) fetchRepositories(parentGroup *GitlabGroup, pageNumber int) ([]
 			Name:        repo.Name,
 			URL:         repo.HttpUrl,
 			Description: repo.Description,
+			Avatar:      repo.Avatar,
 			Private:     repo.Visibility == "private",
+			Archived:    repo.Archived,
 		}
 	}
 
@@ -221,7 +226,7 @@ func (g *Gitlab) fetchRepositories(parentGroup *GitlabGroup, pageNumber int) ([]
 }
 
 func (g *Gitlab) fetchSubgroups(parentGroupID, pageNumber int) ([]GitlabGroup, error) {
-	urlPath := fmt.Sprintf("%s/api/v4/groups/%d/subgroups?per_page=100&page=%d", g.URL.String(), parentGroupID, pageNumber)
+	urlPath := fmt.Sprintf("%s/api/v4/groups/%d/subgroups?all_available=true&per_page=100&page=%d", g.URL.String(), parentGroupID, pageNumber)
 	req, err := http.NewRequest(http.MethodGet, urlPath, nil)
 	if err != nil {
 		return nil, err
@@ -286,6 +291,10 @@ func (g *Gitlab) fetchGroupId(username string) (int, error) {
 func populateParentPath(repos []SourceRepository, metadata *GitlabMetadata) []SourceRepository {
 	// For top level repos, do not populate parent id
 	if metadata.CurrentGroup.ID == metadata.BaseGroupID {
+		for i := range repos {
+			repos[i].ParentGroupPath = make([]string, 0)
+		}
+
 		return repos
 	}
 
@@ -338,6 +347,10 @@ func (g *Gitlab) FetchReleases(username string, repo SourceRepository) ([]Source
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode == http.StatusForbidden {
+			return nil, nil
+		}
+
 		return nil, fmt.Errorf("failed to fetch repositories: %s", resp.Status)
 	}
 
@@ -370,6 +383,6 @@ func (g *Gitlab) FetchReleases(username string, repo SourceRepository) ([]Source
 
 func (g *Gitlab) AddTokenToCloneUrl(u string) string {
 	parsedURL, _ := url.Parse(u)
-	parsedURL.User = url.User(g.Token)
+	parsedURL.User = url.UserPassword("oauth2", g.Token)
 	return parsedURL.String()
 }

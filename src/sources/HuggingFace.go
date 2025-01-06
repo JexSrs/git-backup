@@ -3,7 +3,6 @@ package sources
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"regexp"
 	"strings"
@@ -92,23 +91,19 @@ func (g *HuggingFace) fetchRepositories(cursor string) (*PaginationResponse, err
 
 	nextCursor := extractLink(resp.Header.Get("Link"))
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("error reading response body: %v", err)
-	}
-
-	githubRepos := make([]HuggingFaceRepository, 0)
-	if err := json.Unmarshal(body, &githubRepos); err != nil {
-		return nil, fmt.Errorf("error decoding JSON to map: %v", err)
+	respBody := make([]HuggingFaceRepository, 0)
+	if err := json.NewDecoder(resp.Body).Decode(&respBody); err != nil {
+		return nil, err
 	}
 
 	repos := make([]SourceRepository, 0)
-	for _, repo := range githubRepos {
+	for _, repo := range respBody {
 		repos = append(repos, SourceRepository{
 			Name:        strings.Split(repo.ID, "/")[1],
 			Description: nil,
 			URL:         fmt.Sprintf("https://huggingface.co/%s.git", repo.ID),
 			Private:     false,
+			Archived:    false,
 		})
 	}
 

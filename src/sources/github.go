@@ -24,6 +24,7 @@ type GithubRepository struct {
 	URL         string  `json:"clone_url"`
 	Description *string `json:"description"`
 	Private     bool    `json:"private"`
+	Archived    bool    `json:"archived"`
 }
 
 type GithubRelease struct {
@@ -72,14 +73,9 @@ func (g *Github) Paginate(username string, prev *PaginationResponse) (*Paginatio
 		return nil, fmt.Errorf("received non-200 status code: %d", resp.StatusCode)
 	}
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("error reading response body: %v", err)
-	}
-
 	var res GithubResponse
-	if err := json.Unmarshal(body, &res); err != nil {
-		return nil, fmt.Errorf("error decoding JSON to map: %v", err)
+	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+		return nil, err
 	}
 
 	repos := make([]SourceRepository, 0)
@@ -89,6 +85,7 @@ func (g *Github) Paginate(username string, prev *PaginationResponse) (*Paginatio
 			Description: repo.Description,
 			URL:         repo.URL,
 			Private:     repo.Private,
+			Archived:    repo.Archived,
 		})
 	}
 

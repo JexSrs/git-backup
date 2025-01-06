@@ -3,15 +3,14 @@ package main
 import (
 	"fmt"
 	"github.com/pkg/errors"
+	"main/src/configuration"
 	"main/src/dest"
 	"main/src/sources"
 	"main/src/utils"
-	"os"
-	"path/filepath"
 	"strings"
 )
 
-func SyncUser(gitlab *dest.GitLab, dufs *dest.Dufs, groupCfg ConfigGroup, source sources.Source) {
+func SyncUser(gitlab *dest.GitLab, dufs *dest.Dufs, groupCfg configuration.ConfigGroup, source sources.Source) {
 	fmt.Println("\n================================================")
 	fmt.Printf("Evaluating group %s from %s\n", groupCfg.Username, groupCfg.Source)
 	fmt.Println("================================================")
@@ -135,6 +134,11 @@ func SyncRepo(prj *Project) error {
 			return errors.Wrap(err, "failed to add GitLab as a remote repository")
 		}
 
+		// Un-archive project to sync branches/releases (in case it was archived and re-archived from last time)
+		if err := prj.ChangeArchivedState(false); err != nil {
+			return errors.Wrap(err, "failed to change project state")
+		}
+
 		fmt.Println("- Pushing branches to GitLab...")
 		branches, err := prj.GetBranches()
 		if err != nil {
@@ -154,6 +158,26 @@ func SyncRepo(prj *Project) error {
 			return errors.Wrap(err, "failed to sync tags")
 		}
 	}
+
+	//if *prj.Config.FetchAvatar {
+	//	fmt.Println("- Checking for avatar...")
+	//	if prj.SourceRepository.Avatar != nil {
+	//		fmt.Println("  - Downloading...")
+	//
+	//		ext := utils.ExtractExtension(*prj.SourceRepository.Avatar)
+	//		avatarBuffer, err := utils.DownloadAsset(*prj.SourceRepository.Avatar)
+	//		if err != nil {
+	//			return errors.Wrap(err, "failed to download asset")
+	//		}
+	//
+	//		fmt.Println("  - Uploading avatar to GitLab...")
+	//		if err := prj.ChangeAvatar(avatarBuffer, ext); err != nil {
+	//			return errors.Wrap(err, "failed to link avatar in gitlab")
+	//		}
+	//
+	//		fmt.Println("  - Done")
+	//	}
+	//}
 
 	// Sync WiKi
 	if !*prj.Config.Wiki.Exclude {
@@ -203,7 +227,7 @@ func SyncRepo(prj *Project) error {
 		}
 
 		if releases == nil {
-			fmt.Println("  - Releases are not supported...")
+			fmt.Println("  - Releases are not supported or they are disabled...")
 		} else {
 			fmt.Printf("  - Found %d releases\n", len(releases))
 			for _, release := range releases {
@@ -232,8 +256,9 @@ func SyncRepo(prj *Project) error {
 
 					if !*prj.Config.Releases.Assets.Exclude {
 						fmt.Println("      - Downloading...")
-						assetPath := filepath.Join(prj.GetDir(), "assets__", asset.Name)
-						if err := utils.DownloadAsset(asset.URL, assetPath); err != nil {
+
+						assetBuffer, err := utils.DownloadAsset(asset.URL)
+						if err != nil {
 							return errors.Wrap(err, "failed to download asset")
 						}
 
@@ -243,18 +268,9 @@ func SyncRepo(prj *Project) error {
 						if maxSize != "none" {
 							maxSizeBytes := utils.ConvertToBytes(maxSize)
 
-							size, err := utils.GetFileSize(assetPath)
-							if err != nil {
-								return errors.Wrap(err, "failed to stat asset")
-							}
-
-							fmt.Printf("      - Size: %s\n", utils.ConvertFromBytes(size))
-							if size >= maxSizeBytes {
+							fmt.Printf("      - Size: %s\n", utils.ConvertFromBytes(assetBuffer.Len()))
+							if assetBuffer.Len() >= int(maxSizeBytes) {
 								fmt.Printf("      - Asset %s exceeds the maximum size of %s\n", asset.Name, maxSize)
-								if err := os.Remove(assetPath); err != nil {
-									return errors.Wrap(err, "failed to delete asset from local path")
-								}
-
 								assetShouldBeUploaded = false
 							}
 						}
@@ -269,16 +285,11 @@ func SyncRepo(prj *Project) error {
 								strings.ReplaceAll(asset.Name, "/", "-"),
 							)
 
-							if err := prj.DestinationStorage.UploadFIle(assetPath, assetURL); err != nil {
+							if err := prj.DestinationStorage.UploadFIle(assetBuffer, assetURL); err != nil {
 								return errors.Wrap(err, "failed to upload asset")
 							}
 
 							assetURL = prj.DestinationStorage.URL.JoinPath(assetURL).String()
-
-							// Delete file after upload
-							if err := os.Remove(assetPath); err != nil {
-								return errors.Wrap(err, "failed to delete asset from local path")
-							}
 						}
 					}
 
@@ -291,6 +302,13 @@ func SyncRepo(prj *Project) error {
 					fmt.Println("      - Done")
 				}
 			}
+		}
+	}
+
+	if prj.SourceRepository.Archived {
+		fmt.Println("- Changing repository state to archived")
+		if err := prj.ChangeArchivedState(true); err != nil {
+			return errors.Wrap(err, "failed to change project state")
 		}
 	}
 

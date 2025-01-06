@@ -1,6 +1,8 @@
 package utils
 
-import "strings"
+import (
+	"strings"
+)
 
 func Pointer[T any](s T) *T {
 	return &s
@@ -22,13 +24,4 @@ func ContainsIgnoreCase(slice []string, value string) bool {
 		}
 	}
 	return false
-}
-
-func FindIndex[T any](ss []T, test func(T) bool) int {
-	for i, s := range ss {
-		if test(s) {
-			return i
-		}
-	}
-	return -1
 }

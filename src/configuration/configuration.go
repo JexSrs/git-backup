@@ -1,18 +1,26 @@
-package main
+package configuration
 
 import (
 	"fmt"
-	"main/src/sources"
 	"main/src/utils"
 	"strings"
 )
 
 type Configuration struct {
-	Gitlab  ConfigGitLab  `json:"gitlab"`
-	Dufs    ConfigDufs    `json:"dufs"`
-	Config  ConfigRepo    `json:"config"`
-	Sources ConfigSources `json:"sources"`
-	Groups  []ConfigGroup `json:"groups"`
+	Gitlab  ConfigGitLab    `json:"gitlab"`
+	Dufs    ConfigDufs      `json:"dufs"`
+	Config  ConfigRepo      `json:"config"`
+	Sources []ConfigSources `json:"sources"`
+	Groups  []ConfigGroup   `json:"groups"`
+}
+
+func (c *Configuration) GetSource(id string) *ConfigSources {
+	for i := range c.Sources {
+		if id == c.Sources[i].Id {
+			return &c.Sources[i]
+		}
+	}
+	return nil
 }
 
 type ConfigGitLab struct {
@@ -21,37 +29,25 @@ type ConfigGitLab struct {
 }
 
 type ConfigDufs struct {
-	URL *string `json:"url"`
+	URL      *string `json:"url"`
+	RootPath *string `json:"root_path"`
 }
 
 // Sources configuration
 
 type ConfigSources struct {
-	GitHub      ConfigSourcesGitHub      `json:"github"`
-	HuggingFace ConfigSourcesHuggingFace `json:"huggingface"`
-	Gitlab      ConfigSourcesGitlab      `json:"gitlab"`
-}
-
-type ConfigSourcesGitHub struct {
-	Token  string     `json:"token"`
-	Config ConfigRepo `json:"config"`
-}
-
-type ConfigSourcesHuggingFace struct {
-	Token  string     `json:"token"`
-	Config ConfigRepo `json:"config"`
-}
-
-type ConfigSourcesGitlab struct {
-	Token  string     `json:"token"`
-	Config ConfigRepo `json:"config"`
+	Id      string     `json:"id"`
+	BaseURL string     `json:"base_url"`
+	Token   string     `json:"token"`
+	Config  ConfigRepo `json:"config"`
 }
 
 // Repository configuration
 
 type ConfigRepo struct {
-	Wiki     ConfigRepoWiki     `json:"wiki"`
-	Releases ConfigRepoReleases `json:"releases"`
+	FetchAvatar *bool              `json:"fetch_avatar"`
+	Wiki        ConfigRepoWiki     `json:"wiki"`
+	Releases    ConfigRepoReleases `json:"releases"`
 }
 
 type ConfigRepoWiki struct {
@@ -78,9 +74,9 @@ type ConfigGroup struct {
 	Skip   *int       `json:"skip"`
 	Config ConfigRepo `json:"config"`
 
-	IncludeOnly  []string                     `json:"include_only"`
-	Exclude      []string                     `json:"exclude"`
-	Repositories []ConfigRepositoryRepository `json:"repositories"`
+	IncludeOnly  []string           `json:"include_only"`
+	Exclude      []string           `json:"exclude"`
+	Repositories []ConfigRepository `json:"repositories"`
 }
 
 func (c *ConfigGroup) GetConfig(name string) ConfigRepo {
@@ -97,7 +93,7 @@ func (c *ConfigGroup) GetConfig(name string) ConfigRepo {
 	return cfg
 }
 
-type ConfigRepositoryRepository struct {
+type ConfigRepository struct {
 	ConfigRepo
 
 	Name string `json:"name"`
@@ -108,7 +104,12 @@ func (c *Configuration) PopulateDefault() {
 		c.Gitlab.URL = utils.Pointer("https://gitlab.com/")
 	}
 
+	if c.Dufs.RootPath == nil {
+		c.Dufs.RootPath = utils.Pointer("/")
+	}
+
 	c.Config.DefaultFrom(ConfigRepo{
+		FetchAvatar: utils.Pointer(true),
 		Wiki: ConfigRepoWiki{
 			Exclude: utils.Pointer(false),
 		},
@@ -125,9 +126,17 @@ func (c *Configuration) PopulateDefault() {
 		c.Groups = make([]ConfigGroup, 0)
 	}
 
-	c.Sources.GitHub.Config.DefaultFrom(c.Config)
-	c.Sources.HuggingFace.Config.DefaultFrom(c.Config)
-	c.Sources.Gitlab.Config.DefaultFrom(c.Config)
+	if c.Sources == nil {
+		c.Sources = make([]ConfigSources, 0)
+	}
+
+	for i := range c.Sources {
+		if strings.HasPrefix(c.Sources[i].Id, "gitlab") && len(c.Sources[i].BaseURL) == 0 {
+			c.Sources[i].BaseURL = "https://gitlab.com"
+		}
+
+		c.Sources[i].Config.DefaultFrom(c.Config)
+	}
 
 	for i := range c.Groups {
 		group := &c.Groups[i]
@@ -136,16 +145,10 @@ func (c *Configuration) PopulateDefault() {
 			group.Skip = utils.Pointer(0)
 		}
 
-		if group.Source == sources.GitHubID {
-			group.Config.DefaultFrom(c.Sources.GitHub.Config)
-		} else if group.Source == sources.HuggingFaceID {
-			group.Config.DefaultFrom(c.Sources.HuggingFace.Config)
-		} else if group.Source == sources.GitlabID {
-			group.Config.DefaultFrom(c.Sources.Gitlab.Config)
+		source := c.GetSource(group.Source)
+		if source != nil {
+			group.Config.DefaultFrom((*source).Config)
 		}
-
-		group.IncludeOnly = nil
-		group.Exclude = nil
 
 		for j := range group.Repositories {
 			repo := &group.Repositories[j]
@@ -155,6 +158,10 @@ func (c *Configuration) PopulateDefault() {
 }
 
 func (c *ConfigRepo) DefaultFrom(from ConfigRepo) {
+	if c.FetchAvatar == nil {
+		c.FetchAvatar = from.FetchAvatar
+	}
+
 	if c.Wiki.Exclude == nil {
 		c.Wiki.Exclude = from.Wiki.Exclude
 	}
@@ -177,20 +184,21 @@ func (c *Configuration) Validate() error {
 		return fmt.Errorf("dufs url is required")
 	}
 
-	for i, repo := range c.Groups {
-		if repo.Source != sources.GitHubID && repo.Source != sources.HuggingFaceID && repo.Source != sources.GitlabID {
-			return fmt.Errorf("source %s is not valid at index %d", repo.Source, i)
+	for i, group := range c.Groups {
+		source := c.GetSource(group.Source)
+		if source == nil {
+			return fmt.Errorf("source %s does not exist at index %d", group.Source, i)
 		}
 
-		if len(repo.Username) == 0 {
+		if len(group.Username) == 0 {
 			return fmt.Errorf("username is required at index %d", i)
 		}
 
-		if repo.GitLabGroupID == nil || *repo.GitLabGroupID < 0 {
+		if group.GitLabGroupID == nil || *group.GitLabGroupID < 0 {
 			return fmt.Errorf("gitlab_group_id is required at index %d", i)
 		}
 
-		for j, repo2 := range repo.Repositories {
+		for j, repo2 := range group.Repositories {
 			if len(repo2.Name) == 0 {
 				return fmt.Errorf("name is required at index %d.%d", i, j)
 			}

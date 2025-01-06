@@ -1,13 +1,17 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
+	"io"
+	"main/src/configuration"
 	"main/src/dest"
 	"main/src/sources"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"os"
@@ -18,7 +22,7 @@ import (
 )
 
 type Project struct {
-	Config ConfigRepo
+	Config configuration.ConfigRepo
 
 	Destination           *dest.GitLab
 	DestinationRepository *ProjectGitLab
@@ -44,7 +48,7 @@ type ReqGroup struct {
 	Name string `json:"name"`
 }
 
-func NewProject(gitlab *dest.GitLab, dufs *dest.Dufs, groupId int, source sources.Source, username string, sourceRepository sources.SourceRepository, config ConfigRepo) *Project {
+func NewProject(gitlab *dest.GitLab, dufs *dest.Dufs, groupId int, source sources.Source, username string, sourceRepository sources.SourceRepository, config configuration.ConfigRepo) *Project {
 	return &Project{
 		Destination: gitlab,
 		DestinationRepository: &ProjectGitLab{
@@ -127,6 +131,7 @@ func (g *Project) getGroupIdByName(parentGroupId int, groupName string) (int, er
 func (g *Project) createGroup(parentGroupId int, groupName string) (int, error) {
 	data := url.Values{}
 	data.Set("name", groupName)
+	data.Set("path", groupName)
 	data.Set("parent_id", fmt.Sprintf("%d", parentGroupId))
 
 	urlPath := fmt.Sprintf("/api/v4/groups?%s", data.Encode())
@@ -136,7 +141,7 @@ func (g *Project) createGroup(parentGroupId int, groupName string) (int, error) 
 	}
 
 	if body.Status != http.StatusCreated {
-		return -1, fmt.Errorf("failed to create group %s", groupName)
+		return -1, fmt.Errorf("failed to create group %s: %s", groupName, body.Body)
 	}
 
 	var newGroup ReqGroup
@@ -193,13 +198,13 @@ func (g *Project) Import(groupId int) (int, error) {
 		data.Add("description", *g.SourceRepository.Description)
 	}
 
-	body, err := g.Destination.Request(http.MethodPost, "/api/v4/projects", []byte(data.Encode()))
+	body, err := g.Destination.Request(http.MethodPost, "/api/v4/projects", bytes.NewBuffer([]byte(data.Encode())))
 	if err != nil {
 		return -1, fmt.Errorf("creating request: %w", err)
 	}
 
 	if body.Status != http.StatusCreated {
-		return -1, fmt.Errorf("invalid response: %s", body.Body)
+		return -1, fmt.Errorf("invalid response: %d %s", body.Status, body.Body)
 	}
 
 	var result ProjectGitLab
@@ -220,7 +225,7 @@ func (g *Project) SetOriginalURL() error {
 	data.Add("value", g.SourceRepository.URL)
 
 	urlPath := fmt.Sprintf("/api/v4/projects/%d/variables", *g.DestinationRepository.ID)
-	_, err := g.Destination.Request(http.MethodPost, urlPath, []byte(data.Encode()))
+	_, err := g.Destination.Request(http.MethodPost, urlPath, bytes.NewBuffer([]byte(data.Encode())))
 	return err
 }
 
@@ -281,6 +286,59 @@ func (g *Project) UnprotectBranch(name string) error {
 	return err
 }
 
+func (g *Project) ChangeArchivedState(archived bool) error {
+	var path string
+	if archived {
+		path = fmt.Sprintf("/api/v4/projects/%d/archive", *g.DestinationRepository.ID)
+	} else {
+		path = fmt.Sprintf("/api/v4/projects/%d/unarchive", *g.DestinationRepository.ID)
+	}
+
+	res, err := g.Destination.Request(http.MethodPost, path, nil)
+	if err != nil {
+		return err
+	}
+
+	if res.Status != http.StatusCreated {
+		return fmt.Errorf("invalid response: %d %s", res.Status, res.Body)
+	}
+
+	return nil
+}
+
+func (g *Project) ChangeAvatar(avatar *bytes.Buffer, ext string) error {
+	var b bytes.Buffer
+	writer := multipart.NewWriter(&b)
+
+	// Create a form file field for the avatar
+	part, err := writer.CreateFormFile("avatar", "avatar."+ext)
+	if err != nil {
+		return fmt.Errorf("error creating form file: %v", err)
+	}
+
+	// Write the avatar buffer to the form file
+	if _, err := io.Copy(part, avatar); err != nil {
+		return fmt.Errorf("error copying avatar buffer: %v", err)
+	}
+
+	// Close the writer to finalize the multipart form
+	if err := writer.Close(); err != nil {
+		return fmt.Errorf("error closing writer: %v", err)
+	}
+
+	urlPath := fmt.Sprintf("/api/v4/projects/%d", *g.DestinationRepository.ID)
+	res, err := g.Destination.Request(http.MethodPut, urlPath, &b)
+	if err != nil {
+		return err
+	}
+
+	if res.Status != http.StatusOK {
+		return fmt.Errorf("invalid response: %d %s", res.Status, res.Body)
+	}
+
+	return nil
+}
+
 func (g *Project) ReleaseExists(tagName string) (bool, error) {
 	tagNameEncoded := url.QueryEscape(tagName)
 	urlPath := fmt.Sprintf("/api/v4/projects/%d/releases/%s", *g.DestinationRepository.ID, tagNameEncoded)
@@ -302,7 +360,7 @@ func (g *Project) CreateRelease(release sources.SourceRelease) error {
 
 	urlPath := fmt.Sprintf("/api/v4/projects/%d/releases", *g.DestinationRepository.ID)
 
-	body, err := g.Destination.Request(http.MethodPost, urlPath, []byte(data.Encode()))
+	body, err := g.Destination.Request(http.MethodPost, urlPath, bytes.NewBuffer([]byte(data.Encode())))
 	if err != nil {
 		return fmt.Errorf("creating request: %w", err)
 	}
@@ -382,7 +440,14 @@ func (g *Project) GetBranches() ([]string, error) {
 
 	names := make([]string, 0)
 	err = branches.ForEach(func(ref *plumbing.Reference) error {
-		names = append(names, ref.Name().String())
+		name := ref.Name().String()
+
+		// For Gitlab sources
+		if strings.HasPrefix(name, "refs/heads/") {
+			name = strings.TrimPrefix(name, "refs/heads/")
+		}
+
+		names = append(names, name)
 		return nil
 	})
 	if err != nil {

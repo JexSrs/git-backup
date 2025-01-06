@@ -1,29 +1,29 @@
 package dest
 
 import (
+	"bytes"
 	"fmt"
 	"io"
+	"main/src/configuration"
 	"net/http"
 	"net/url"
-	"os"
 )
 
 type Dufs struct {
-	URL url.URL
+	URL      url.URL
+	RootPath string
 }
 
-func NewDufs(url url.URL) *Dufs {
-	return &Dufs{url}
-}
-
-func (d *Dufs) UploadFIle(srcPath, dstPath string) error {
-	file, err := os.Open(srcPath)
-	if err != nil {
-		return fmt.Errorf("error opening file: %w", err)
+func NewDufs(config configuration.ConfigDufs) *Dufs {
+	dufsUrl, _ := url.Parse(*config.URL)
+	return &Dufs{
+		URL:      *dufsUrl,
+		RootPath: *config.RootPath,
 	}
-	defer file.Close()
+}
 
-	request, err := http.NewRequest(http.MethodPut, d.URL.JoinPath(dstPath).String(), file)
+func (d *Dufs) UploadFIle(buffer *bytes.Buffer, dstPath string) error {
+	request, err := http.NewRequest(http.MethodPut, d.URL.JoinPath(d.RootPath, dstPath).String(), buffer)
 	if err != nil {
 		return fmt.Errorf("error creating request: %w", err)
 	}
