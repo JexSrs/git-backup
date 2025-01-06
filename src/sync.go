@@ -159,25 +159,25 @@ func SyncRepo(prj *Project) error {
 		}
 	}
 
-	//if *prj.Config.FetchAvatar {
-	//	fmt.Println("- Checking for avatar...")
-	//	if prj.SourceRepository.Avatar != nil {
-	//		fmt.Println("  - Downloading...")
-	//
-	//		ext := utils.ExtractExtension(*prj.SourceRepository.Avatar)
-	//		avatarBuffer, err := utils.DownloadAsset(*prj.SourceRepository.Avatar)
-	//		if err != nil {
-	//			return errors.Wrap(err, "failed to download asset")
-	//		}
-	//
-	//		fmt.Println("  - Uploading avatar to GitLab...")
-	//		if err := prj.ChangeAvatar(avatarBuffer, ext); err != nil {
-	//			return errors.Wrap(err, "failed to link avatar in gitlab")
-	//		}
-	//
-	//		fmt.Println("  - Done")
-	//	}
-	//}
+	if *prj.Config.FetchAvatar {
+		fmt.Println("- Checking for avatar...")
+		if prj.SourceRepository.Avatar != nil {
+			fmt.Println("  - Downloading...")
+
+			ext := utils.ExtractExtension(*prj.SourceRepository.Avatar)
+			avatarBuffer, err := utils.DownloadAsset(*prj.SourceRepository.Avatar)
+			if err != nil {
+				return errors.Wrap(err, "failed to download asset")
+			}
+
+			fmt.Println("  - Uploading avatar to GitLab...")
+			if err := prj.ChangeAvatar(avatarBuffer, ext); err != nil {
+				return errors.Wrap(err, "failed to link avatar in gitlab")
+			}
+
+			fmt.Println("  - Done")
+		}
+	}
 
 	// Sync WiKi
 	if !*prj.Config.Wiki.Exclude {

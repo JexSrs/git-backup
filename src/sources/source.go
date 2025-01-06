@@ -24,10 +24,16 @@ type SourceRepository struct {
 	Private     bool
 	Archived    bool
 
-	ParentGroupPath []string
+	ParentGroupPath []SourceRepositoryGroup
 
 	// Used by GitLab
 	ID int
+}
+
+type SourceRepositoryGroup struct {
+	Path   string
+	Name   string
+	Avatar *string
 }
 
 type SourceRelease struct {

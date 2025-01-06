@@ -292,7 +292,7 @@ func populateParentPath(repos []SourceRepository, metadata *GitlabMetadata) []So
 	// For top level repos, do not populate parent id
 	if metadata.CurrentGroup.ID == metadata.BaseGroupID {
 		for i := range repos {
-			repos[i].ParentGroupPath = make([]string, 0)
+			repos[i].ParentGroupPath = make([]SourceRepositoryGroup, 0)
 		}
 
 		return repos
@@ -305,10 +305,14 @@ func populateParentPath(repos []SourceRepository, metadata *GitlabMetadata) []So
 	}
 
 	// Start from the current group and traverse up to the base group
-	path := make([]string, 0)
+	path := make([]SourceRepositoryGroup, 0)
 	curr := metadata.CurrentGroup
 	for curr != nil && curr.ID != metadata.BaseGroupID {
-		path = append([]string{curr.Name}, path...) // Prepend the current group's name
+		path = append([]SourceRepositoryGroup{{
+			Path:   curr.Path,
+			Name:   curr.Name,
+			Avatar: curr.Avatar,
+		}}, path...) // Prepend the current group's name
 
 		// Move to the parent group
 		if parentGroup, exists := mGroups[curr.ParentID]; exists {

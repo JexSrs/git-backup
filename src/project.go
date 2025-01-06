@@ -11,6 +11,7 @@ import (
 	"main/src/configuration"
 	"main/src/dest"
 	"main/src/sources"
+	"main/src/utils"
 	"mime/multipart"
 	"net/http"
 	"net/url"
@@ -46,6 +47,10 @@ type ProjectGitLab struct {
 type ReqGroup struct {
 	ID   int    `json:"id"`
 	Name string `json:"name"`
+	Path string `json:"path"`
+
+	Visibility string  `json:"visibility"`
+	Avatar     *string `json:"avatar_url"`
 }
 
 func NewProject(gitlab *dest.GitLab, dufs *dest.Dufs, groupId int, source sources.Source, username string, sourceRepository sources.SourceRepository, config configuration.ConfigRepo) *Project {
@@ -71,8 +76,8 @@ func (g *Project) RetrieveParentGroup() (int, error) {
 
 	path := g.SourceRepository.ParentGroupPath
 	if path != nil && len(path) != 0 {
-		for _, groupName := range path {
-			id, err := g.upsertGroup(groupId, groupName)
+		for _, group := range path {
+			id, err := g.upsertGroup(groupId, group)
 			if err != nil {
 				return -1, err
 			}
@@ -83,24 +88,27 @@ func (g *Project) RetrieveParentGroup() (int, error) {
 	return groupId, nil
 }
 
-func (g *Project) upsertGroup(parentGroupId int, groupName string) (int, error) {
+func (g *Project) upsertGroup(parentGroupId int, group sources.SourceRepositoryGroup) (int, error) {
 	// Check if the group already exists
-	groupId, err := g.getGroupIdByName(parentGroupId, groupName)
-	if err == nil {
-		return groupId, nil // Group exists, return its ID
+	groupId, err := g.getGroupIdByName(parentGroupId, group)
+	if err != nil {
+		return -1, err // Group exists, return its ID
+	}
+	if groupId != -1 {
+		return groupId, nil
 	}
 
 	// Group does not exist, create it
-	newGroupId, err := g.createGroup(parentGroupId, groupName)
+	newGroupId, err := g.createGroup(parentGroupId, group)
 	if err != nil {
 		return -1, err
 	}
 	return newGroupId, nil
 }
 
-func (g *Project) getGroupIdByName(parentGroupId int, groupName string) (int, error) {
+func (g *Project) getGroupIdByName(parentGroupId int, group sources.SourceRepositoryGroup) (int, error) {
 	data := url.Values{}
-	data.Add("search", groupName)
+	data.Add("search", group.Name)
 	data.Add("per_page", "100")
 
 	urlPath := fmt.Sprintf("/api/v4/groups/%d/subgroups?%s", parentGroupId, data.Encode())
@@ -119,19 +127,19 @@ func (g *Project) getGroupIdByName(parentGroupId int, groupName string) (int, er
 		return -1, err
 	}
 
-	for _, group := range groups {
-		if group.Name == groupName {
-			return group.ID, nil // Return the ID of the existing group
+	for _, g := range groups {
+		if g.Path == group.Name {
+			return g.ID, nil // Return the ID of the existing group
 		}
 	}
 
-	return -1, fmt.Errorf("group %s not found", groupName)
+	return -1, nil
 }
 
-func (g *Project) createGroup(parentGroupId int, groupName string) (int, error) {
+func (g *Project) createGroup(parentGroupId int, group sources.SourceRepositoryGroup) (int, error) {
 	data := url.Values{}
-	data.Set("name", groupName)
-	data.Set("path", groupName)
+	data.Set("name", group.Name)
+	data.Set("path", group.Path)
 	data.Set("parent_id", fmt.Sprintf("%d", parentGroupId))
 
 	urlPath := fmt.Sprintf("/api/v4/groups?%s", data.Encode())
@@ -141,13 +149,27 @@ func (g *Project) createGroup(parentGroupId int, groupName string) (int, error) 
 	}
 
 	if body.Status != http.StatusCreated {
-		return -1, fmt.Errorf("failed to create group %s: %s", groupName, body.Body)
+		return -1, fmt.Errorf("failed to create group %s: %s", group.Name, body.Body)
 	}
 
 	var newGroup ReqGroup
 	err = json.Unmarshal(body.Body, &newGroup)
 	if err != nil {
 		return -1, err
+	}
+
+	// Download & update avatar
+	if newGroup.Avatar != nil {
+		ext := utils.ExtractExtension(*newGroup.Avatar)
+
+		buff, err := utils.DownloadAsset(*newGroup.Avatar)
+		if err != nil {
+			return -1, err
+		}
+
+		if err := g.changeAvatar("groups", newGroup.ID, buff, ext); err != nil {
+			return -1, err
+		}
 	}
 
 	return newGroup.ID, nil
@@ -307,6 +329,10 @@ func (g *Project) ChangeArchivedState(archived bool) error {
 }
 
 func (g *Project) ChangeAvatar(avatar *bytes.Buffer, ext string) error {
+	return g.changeAvatar("projects", *g.DestinationRepository.ID, avatar, ext)
+}
+
+func (g *Project) changeAvatar(t string, id int, avatar *bytes.Buffer, ext string) error {
 	var b bytes.Buffer
 	writer := multipart.NewWriter(&b)
 
@@ -326,7 +352,7 @@ func (g *Project) ChangeAvatar(avatar *bytes.Buffer, ext string) error {
 		return fmt.Errorf("error closing writer: %v", err)
 	}
 
-	urlPath := fmt.Sprintf("/api/v4/projects/%d", *g.DestinationRepository.ID)
+	urlPath := fmt.Sprintf("/api/v4/%s/%d", t, id)
 	res, err := g.Destination.Request(http.MethodPut, urlPath, &b)
 	if err != nil {
 		return err
