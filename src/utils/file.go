@@ -10,14 +10,14 @@ import (
 )
 
 func OpenConfigFile() ([]byte, error) {
-	filenames := []string{"config.json5", "configuration.json", "config.json5", "configuration.json5"}
+	filenames := []string{"config.json", "configuration.json", "config.jsonc", "configuration.jsonc"}
 	for _, filename := range filenames {
 		content, err := os.ReadFile(filename)
 		if err == nil {
 			return content, nil
 		}
 	}
-	return nil, fmt.Errorf("none of the configuration files were found.")
+	return nil, fmt.Errorf("none of the configuration files were found")
 }
 
 func GetFileSize(filename string) (int64, error) {

@@ -7,45 +7,54 @@ import (
 )
 
 type Configuration struct {
-	Gitlab  ConfigGitLab    `json:"gitlab"`
-	Dufs    ConfigDufs      `json:"dufs"`
-	Config  ConfigRepo      `json:"config"`
-	Sources []ConfigSources `json:"sources"`
-	Groups  []ConfigGroup   `json:"groups"`
+	Filter       ConfigFilter        `json:"filter"`
+	Config       ConfigRepo          `json:"config"`
+	Destinations []ConfigDestination `json:"destinations"`
+	Sources      []ConfigSource      `json:"sources"`
+	Groups       []ConfigGroup       `json:"groups"`
 }
 
-func (c *Configuration) GetSource(id string) *ConfigSources {
+func (c *Configuration) GetSource(id string) *ConfigSource {
 	for i := range c.Sources {
-		if id == c.Sources[i].Id {
+		if id == c.Sources[i].ID {
 			return &c.Sources[i]
 		}
 	}
 	return nil
 }
 
-type ConfigGitLab struct {
-	URL   *string `json:"url"`
-	Token *string `json:"token"`
+func (c *Configuration) GetDestination(id string) *ConfigDestination {
+	for i := range c.Destinations {
+		if id == c.Destinations[i].ID {
+			return &c.Destinations[i]
+		}
+	}
+	return nil
 }
 
-type ConfigDufs struct {
-	URL      *string `json:"url"`
-	RootPath *string `json:"root_path"`
+// Destinations configuration
+
+type ConfigDestination struct {
+	ID    string `json:"id"`
+	URL   string `json:"base_url"`
+	Token string `json:"token"`
 }
 
 // Sources configuration
 
-type ConfigSources struct {
-	Id      string     `json:"id"`
-	BaseURL string     `json:"base_url"`
-	Token   string     `json:"token"`
-	Config  ConfigRepo `json:"config"`
+type ConfigSource struct {
+	ID      string       `json:"id"`
+	BaseURL string       `json:"base_url"`
+	Token   string       `json:"token"`
+	Config  ConfigRepo   `json:"config"`
+	Filter  ConfigFilter `json:"filter"`
 }
 
 // Repository configuration
 
 type ConfigRepo struct {
 	FetchAvatar *bool              `json:"fetch_avatar"`
+	Destination *string            `json:"destination"`
 	Wiki        ConfigRepoWiki     `json:"wiki"`
 	Releases    ConfigRepoReleases `json:"releases"`
 }
@@ -60,8 +69,43 @@ type ConfigRepoReleases struct {
 }
 
 type ConfigRepoAssets struct {
-	Exclude *bool   `json:"exclude"`
-	MaxSize *string `json:"max_size"`
+	Destination *string `json:"destination"`
+	Exclude     *bool   `json:"exclude"`
+	MaxSize     *string `json:"max_size"`
+}
+
+// Filter configuration
+
+type ConfigFilter struct {
+	Visibility     []string                   `json:"visibility"`
+	Archived       *bool                      `json:"archived"`
+	HasDescription *bool                      `json:"has_description"`
+	License        []string                   `json:"license"`
+	Topics         []string                   `json:"topics"`
+	Pages          *bool                      `json:"pages"`
+	Discussions    *bool                      `json:"discussions"`
+	Forked         *bool                      `json:"forked"`
+	NameRegex      *string                    `json:"name"`
+	Language       []string                   `json:"language"`
+	Stars          ConfigFilterMinMax[int]    `json:"stars"`
+	Watchers       ConfigFilterMinMax[int]    `json:"watchers"`
+	Forks          ConfigFilterMinMax[int]    `json:"forks"`
+	Branches       ConfigFilterMinMax[int]    `json:"branches"`
+	Tags           ConfigFilterMinMax[int]    `json:"tags"`
+	CreatedAt      ConfigFilterMinMax[string] `json:"created"`
+	Updated        ConfigFilterMinMax[string] `json:"updated"`
+	Size           ConfigFilterMinMax[int]    `json:"size"`
+	Issues         ConfigFilterIssues         `json:"issues"`
+}
+
+type ConfigFilterMinMax[T any] struct {
+	Min *T `json:"min"`
+	Max *T `json:"max"`
+}
+
+type ConfigFilterIssues struct {
+	Enabled *bool                   `json:"enabled"`
+	Open    ConfigFilterMinMax[int] `json:"open"`
 }
 
 // Repositories configuration
@@ -69,10 +113,11 @@ type ConfigRepoAssets struct {
 type ConfigGroup struct {
 	Source        string `json:"source"`
 	Username      string `json:"username"`
-	GitLabGroupID *int   `json:"gitlab_group_id"`
+	GitlabGroupID int    `json:"gitlab_group_id"`
 
-	Skip   *int       `json:"skip"`
-	Config ConfigRepo `json:"config"`
+	Skip   *int         `json:"skip"`
+	Filter ConfigFilter `json:"filter"`
+	Config ConfigRepo   `json:"config"`
 
 	IncludeOnly  []string           `json:"include_only"`
 	Exclude      []string           `json:"exclude"`
@@ -95,18 +140,15 @@ func (c *ConfigGroup) GetConfig(name string) ConfigRepo {
 
 type ConfigRepository struct {
 	ConfigRepo
+	Filter ConfigFilter `json:"filter"`
 
 	Name string `json:"name"`
 }
 
 func (c *Configuration) PopulateDefault() {
-	if c.Gitlab.URL == nil {
-		c.Gitlab.URL = utils.Pointer("https://gitlab.com/")
-	}
-
-	if c.Dufs.RootPath == nil {
-		c.Dufs.RootPath = utils.Pointer("/")
-	}
+	c.Filter.DefaultFrom(ConfigFilter{
+		Visibility: []string{"public", "private"},
+	})
 
 	c.Config.DefaultFrom(ConfigRepo{
 		FetchAvatar: utils.Pointer(true),
@@ -126,16 +168,21 @@ func (c *Configuration) PopulateDefault() {
 		c.Groups = make([]ConfigGroup, 0)
 	}
 
+	if c.Destinations == nil {
+		c.Destinations = make([]ConfigDestination, 0)
+	}
+
 	if c.Sources == nil {
-		c.Sources = make([]ConfigSources, 0)
+		c.Sources = make([]ConfigSource, 0)
 	}
 
 	for i := range c.Sources {
-		if strings.HasPrefix(c.Sources[i].Id, "gitlab") && len(c.Sources[i].BaseURL) == 0 {
+		if strings.HasPrefix(c.Sources[i].ID, "gitlab") && len(c.Sources[i].BaseURL) == 0 {
 			c.Sources[i].BaseURL = "https://gitlab.com"
 		}
 
 		c.Sources[i].Config.DefaultFrom(c.Config)
+		c.Sources[i].Filter.DefaultFrom(c.Filter)
 	}
 
 	for i := range c.Groups {
@@ -148,11 +195,13 @@ func (c *Configuration) PopulateDefault() {
 		source := c.GetSource(group.Source)
 		if source != nil {
 			group.Config.DefaultFrom((*source).Config)
+			group.Filter.DefaultFrom((*source).Filter)
 		}
 
 		for j := range group.Repositories {
 			repo := &group.Repositories[j]
 			repo.ConfigRepo.DefaultFrom(group.Config)
+			repo.Filter.DefaultFrom(group.Filter)
 		}
 	}
 }
@@ -160,6 +209,10 @@ func (c *Configuration) PopulateDefault() {
 func (c *ConfigRepo) DefaultFrom(from ConfigRepo) {
 	if c.FetchAvatar == nil {
 		c.FetchAvatar = from.FetchAvatar
+	}
+
+	if c.Destination == nil {
+		c.Destination = from.Destination
 	}
 
 	if c.Wiki.Exclude == nil {
@@ -177,30 +230,171 @@ func (c *ConfigRepo) DefaultFrom(from ConfigRepo) {
 	if c.Releases.Assets.MaxSize == nil {
 		c.Releases.Assets.MaxSize = from.Releases.Assets.MaxSize
 	}
+
+	if c.Releases.Assets.Destination == nil {
+		c.Releases.Assets.Destination = from.Releases.Assets.Destination
+	}
+}
+
+func (c *ConfigFilter) DefaultFrom(from ConfigFilter) {
+	if c.Visibility == nil {
+		c.Visibility = from.Visibility
+	}
+
+	if c.Archived == nil {
+		c.Archived = from.Archived
+	}
+
+	if c.HasDescription == nil {
+		c.HasDescription = from.HasDescription
+	}
+
+	if c.License == nil {
+		c.License = from.License
+	}
+
+	if c.Topics == nil {
+		c.Topics = from.Topics
+	}
+
+	if c.Pages == nil {
+		c.Pages = from.Pages
+	}
+
+	if c.Discussions == nil {
+		c.Discussions = from.Discussions
+	}
+
+	if c.Forked == nil {
+		c.Forked = from.Forked
+	}
+
+	if c.NameRegex == nil {
+		c.NameRegex = from.NameRegex
+	}
+
+	if c.Language == nil {
+		c.Language = from.Language
+	}
+
+	if c.Stars.Min == nil {
+		c.Stars.Min = from.Stars.Min
+	}
+
+	if c.Stars.Max == nil {
+		c.Stars.Max = from.Stars.Max
+	}
+
+	if c.Watchers.Min == nil {
+		c.Watchers.Min = from.Watchers.Min
+	}
+
+	if c.Watchers.Max == nil {
+		c.Watchers.Max = from.Watchers.Max
+	}
+
+	if c.Forks.Min == nil {
+		c.Forks.Min = from.Forks.Min
+	}
+
+	if c.Forks.Max == nil {
+		c.Forks.Max = from.Forks.Max
+	}
+
+	if c.Branches.Min == nil {
+		c.Branches.Min = from.Branches.Min
+	}
+
+	if c.Branches.Max == nil {
+		c.Branches.Max = from.Branches.Max
+	}
+
+	if c.Tags.Min == nil {
+		c.Tags.Min = from.Tags.Min
+	}
+
+	if c.Tags.Max == nil {
+		c.Tags.Max = from.Tags.Max
+	}
+
+	if c.CreatedAt.Min == nil {
+		c.CreatedAt.Min = from.CreatedAt.Min
+	}
+
+	if c.CreatedAt.Max == nil {
+		c.CreatedAt.Max = from.CreatedAt.Max
+	}
+
+	if c.Updated.Min == nil {
+		c.Updated.Min = from.Updated.Min
+	}
+
+	if c.Updated.Max == nil {
+		c.Updated.Max = from.Updated.Max
+	}
+
+	if c.Size.Min == nil {
+		c.Size.Min = from.Size.Min
+	}
+
+	if c.Size.Max == nil {
+		c.Size.Max = from.Size.Max
+	}
+
+	if c.Issues.Enabled == nil {
+		c.Issues.Enabled = from.Issues.Enabled
+	}
+
+	if c.Issues.Open.Min == nil {
+		c.Issues.Open.Min = from.Issues.Open.Min
+	}
+
+	if c.Issues.Open.Max == nil {
+		c.Issues.Open.Max = from.Issues.Open.Max
+	}
 }
 
 func (c *Configuration) Validate() error {
-	if c.Dufs.URL == nil {
-		return fmt.Errorf("dufs url is required")
-	}
-
+	assetsEnabled := !*c.Config.Releases.Assets.Exclude
 	for i, group := range c.Groups {
 		source := c.GetSource(group.Source)
 		if source == nil {
 			return fmt.Errorf("source %s does not exist at index %d", group.Source, i)
 		}
 
+		assetsEnabled = assetsEnabled || !*source.Config.Releases.Assets.Exclude
+
 		if len(group.Username) == 0 {
 			return fmt.Errorf("username is required at index %d", i)
 		}
 
-		if group.GitLabGroupID == nil || *group.GitLabGroupID < 0 {
-			return fmt.Errorf("gitlab_group_id is required at index %d", i)
+		if group.GitlabGroupID < 0 {
+			return fmt.Errorf("gitlab_group_id is invalid at index %d", i)
 		}
 
-		for j, repo2 := range group.Repositories {
-			if len(repo2.Name) == 0 {
+		for j, repo := range group.Repositories {
+			if len(repo.Name) == 0 {
 				return fmt.Errorf("name is required at index %d.%d", i, j)
+			}
+
+			assetsEnabled = assetsEnabled || !*repo.Releases.Assets.Exclude
+
+			if repo.Destination == nil {
+				return fmt.Errorf("repository destination is required at index %d.%d", i, j)
+			}
+
+			gitDst := c.GetDestination(*repo.Destination)
+			if gitDst == nil {
+				return fmt.Errorf("destination %s does not exist at index %d.%d", *repo.Destination, i, j)
+			}
+
+			if repo.Releases.Assets.Destination == nil {
+				return fmt.Errorf("asset destination is required at index %d.%d", i, j)
+			}
+
+			storageDst := c.GetDestination(*repo.Releases.Assets.Destination)
+			if storageDst == nil {
+				return fmt.Errorf("asset destination %s does not exist at index %d.%d", *repo.Destination, i, j)
 			}
 		}
 	}

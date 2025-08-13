@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-func SyncUser(gitlab *dest.GitLab, dufs *dest.Dufs, groupCfg configuration.ConfigGroup, source sources.Source) {
+func SyncUser(dst map[string]dest.Destination, groupCfg configuration.ConfigGroup, source sources.Source) {
 	fmt.Println("\n================================================")
 	fmt.Printf("Evaluating group %s from %s\n", groupCfg.Username, groupCfg.Source)
 	fmt.Println("================================================")
@@ -29,16 +29,6 @@ func SyncUser(gitlab *dest.GitLab, dufs *dest.Dufs, groupCfg configuration.Confi
 		}
 
 		for _, remote := range result.Repositories {
-			if gitlab.IsReservedName(remote.Name) {
-				fmt.Printf("Skipping repository %s: reserved name\n", remote.Name)
-				continue
-			}
-
-			if !gitlab.IsValidName(remote.Name) {
-				fmt.Printf("Skipping repository %s: invalid name\n", remote.Name)
-				continue
-			}
-
 			if groupCfg.Skip != nil && *groupCfg.Skip >= count {
 				fmt.Printf("Skipping repository %s: from --skip\n", remote.Name)
 				count++
@@ -57,14 +47,8 @@ func SyncUser(gitlab *dest.GitLab, dufs *dest.Dufs, groupCfg configuration.Confi
 
 			fmt.Printf("\n%d. Evaluating repository %s\n", count, remote.Name)
 			cfg := groupCfg.GetConfig(remote.Name)
-			prj := NewProject(gitlab, dufs, *groupCfg.GitLabGroupID, source, groupCfg.Username, remote, cfg)
-			if err := SyncRepo(prj); err != nil {
+			if err := SyncRepo(dst, source, remote, cfg, groupCfg); err != nil {
 				fmt.Println(err)
-			}
-
-			// Close project and delete any allocated storage
-			if err := prj.Prune(); err != nil {
-				fmt.Println(errors.Wrap(err, "failed to prune project"))
 			}
 
 			count++
@@ -74,41 +58,44 @@ func SyncUser(gitlab *dest.GitLab, dufs *dest.Dufs, groupCfg configuration.Confi
 	}
 }
 
-func SyncRepo(prj *Project) error {
-	fmt.Println("- Retrieving repository parent group...")
-	groupId, err := prj.RetrieveParentGroup()
-	if err != nil {
-		return errors.Wrap(err, "failed to retrieve parent group")
-	}
+func SyncRepo(
+	dst map[string]dest.Destination,
+	source sources.Source,
+	remote sources.SourceRepository,
+	config configuration.ConfigRepo,
+	gConfig configuration.ConfigGroup,
+) error {
+	// Match destination
+	gitDst := dst[*config.Destination]
+	storageDst := dst[*config.Releases.Assets.Destination]
+
+	dstID := gitDst.GetIdentification()
 
 	fmt.Println("- Checking repository...")
-	repoID, err := prj.RetrieveExistingRepo(groupId)
+	repo, err := gitDst.RetrieveExistingRepo(gConfig, remote)
 	if err != nil {
 		return errors.Wrap(err, "failed to retrieve existing repo")
 	}
 
-	// Sync repository
-	if repoID == -1 {
-		fmt.Println("- Repository does not exist in GitLab...")
-		repoID, err = prj.Import(groupId)
+	if repo == nil {
+		fmt.Println("- Repository does not exist in gitDst...")
+		repo, err = gitDst.ImportRepository(gConfig, remote, source)
 		if err != nil {
 			return errors.Wrap(err, "failed to import project")
 		}
-		fmt.Println("- Importing new repository in GitLab with project ID:", repoID)
+		fmt.Println("- Imported new repository in gitDst with identification:", repo.ID)
 
-		fmt.Println("- Create 'original_url' attribute with value:", prj.SourceRepository.URL)
-		err = prj.SetOriginalURL()
-		if err != nil {
+		fmt.Println("- Setting 'original_url' attribute with value:", remote.URL)
+		if err := gitDst.SetOriginalUrl(repo, remote.URL); err != nil {
 			return errors.Wrap(err, "failed to set original url")
 		}
 
 		fmt.Println("- Waiting for repository import to finish...")
-		err = prj.LockUntilImport()
-		if err != nil {
+		if err := gitDst.LockUntilImport(repo); err != nil {
 			return errors.Wrap(err, "failed to read import status")
 		}
 
-		protectedBranches, err := prj.GetProtectedBranches()
+		protectedBranches, err := gitDst.GetProtectedBranches(repo)
 		if err != nil {
 			return errors.Wrap(err, "failed to get list of protected branches")
 		}
@@ -117,83 +104,90 @@ func SyncRepo(prj *Project) error {
 		fmt.Println("  - Unprotecting branches...")
 		for _, branch := range protectedBranches {
 			fmt.Printf("    - Unprotecting %s...\n", branch)
-			err = prj.UnprotectBranch(branch)
-			if err != nil {
+			if err := gitDst.UnprotectBranch(repo, branch); err != nil {
 				return errors.Wrapf(err, "failed to unprotect branch %s", branch)
 			}
 		}
 	} else {
-		fmt.Println("- Repository already exists in GitLab with project ID:", repoID)
+		fmt.Println("- Repository already exists in gitDst with identification", repo.ID)
 		fmt.Println("- Cloning repository from source...")
-		if err := prj.CloneFromSource(); err != nil {
+		if err := gitDst.CloneFromSource(repo, source); err != nil {
 			return errors.Wrap(err, "failed to clone source")
 		}
 
-		fmt.Println("- Adding GitLab as a remote repository..")
-		if err := prj.AddRemoteToRepo(); err != nil {
-			return errors.Wrap(err, "failed to add GitLab as a remote repository")
+		defer func() {
+			if err := repo.Prune(); err != nil {
+				fmt.Println(errors.Wrap(err, "failed to prune project"))
+			}
+		}()
+
+		fmt.Println("- Adding gitDst as a remote repository..")
+		if err := gitDst.AddRemoteToRepo(repo); err != nil {
+			return errors.Wrap(err, "failed to add gitDst as a remote repository")
 		}
 
 		// Un-archive project to sync branches/releases (in case it was archived and re-archived from last time)
-		if err := prj.ChangeArchivedState(false); err != nil {
-			return errors.Wrap(err, "failed to change project state")
+		if err := gitDst.ChangeArchivedState(repo, false); err != nil {
+			return errors.Wrap(err, "failed to change project archive state")
 		}
 
 		fmt.Println("- Pushing branches to GitLab...")
-		branches, err := prj.GetBranches()
+		branches, err := gitDst.GetLocalBranches(repo)
 		if err != nil {
-			return errors.Wrap(err, "failed to retrieve branches")
+			return errors.Wrap(err, "failed to retrieve local branches")
 		}
 
 		fmt.Printf("  - Found %d branches\n", len(branches))
 		for _, branch := range branches {
 			fmt.Printf("  - Pushing %s...\n", branch)
-			if err := prj.PushBranch(branch); err != nil {
+			if err := gitDst.PushLocalBranch(repo, branch); err != nil {
 				return errors.Wrapf(err, "failed to sync branch %s", branch)
 			}
 		}
 
-		fmt.Println("- Pushing tags to GitLab...")
-		if err := prj.PushAllTags(); err != nil {
+		fmt.Println("- Pushing tags...")
+		if err := gitDst.PushAllTags(repo); err != nil {
 			return errors.Wrap(err, "failed to sync tags")
 		}
 	}
 
-	if *prj.Config.FetchAvatar {
+	if *config.FetchAvatar && dstID.Repository.Avatar {
 		fmt.Println("- Checking for avatar...")
-		if prj.SourceRepository.Avatar != nil {
+		if remote.Avatar != nil {
 			fmt.Println("  - Downloading...")
-
-			ext := utils.ExtractExtension(*prj.SourceRepository.Avatar)
-			avatarBuffer, err := utils.DownloadAsset(*prj.SourceRepository.Avatar)
+			ext := utils.ExtractExtension(*remote.Avatar)
+			avatarBuffer, err := utils.DownloadAsset(*remote.Avatar)
 			if err != nil {
-				return errors.Wrap(err, "failed to download asset")
+				return errors.Wrap(err, "failed to download avatar")
 			}
 
-			fmt.Println("  - Uploading avatar to GitLab...")
-			if err := prj.ChangeAvatar(avatarBuffer, ext); err != nil {
-				return errors.Wrap(err, "failed to link avatar in gitlab")
+			fmt.Println("  - Uploading avatar to gitDst...")
+			if err := gitDst.ChangeAvatar(repo, avatarBuffer, ext); err != nil {
+				return errors.Wrap(err, "failed to link avatar in gitDst")
 			}
 
 			fmt.Println("  - Done")
 		}
 	}
 
-	// Sync WiKi
-	if !*prj.Config.Wiki.Exclude {
+	if !*config.Wiki.Exclude && dstID.Repository.Wiki {
 		fmt.Println("- Checking for source Wiki...")
-		wikiPrj := prj.GetWikiProject()
-		if len(wikiPrj.SourceRepository.URL) == 0 {
-			fmt.Println("  - Source does not support WiKi repository...")
-		} else {
-			if err := wikiPrj.CloneFromSource(); err == nil {
+		wikiRepo := gitDst.GetWikiProject(repo, gConfig, source)
+		if wikiRepo != nil {
+			if err := gitDst.CloneFromSource(wikiRepo, source); err == nil {
+				defer func() {
+					if err := wikiRepo.Prune(); err != nil {
+						fmt.Println(errors.Wrap(err, "failed to prune wiki project"))
+					}
+				}()
+
 				fmt.Println("  - Found remote Wiki, syncing...")
-				if err := wikiPrj.AddRemoteToRepo(); err != nil {
+				if err := gitDst.AddRemoteToRepo(wikiRepo); err != nil {
 					return errors.Wrap(err, "failed to add GitLab as a remote repository in wiki")
 				}
 
-				fmt.Println("  - Pushing branches to GitLab...")
-				branches, err := wikiPrj.GetBranches()
+				fmt.Println("  - Pushing branches to gitDst...")
+				branches, err := gitDst.GetLocalBranches(wikiRepo)
 				if err != nil {
 					return errors.Wrap(err, "failed to retrieve branches in wiki")
 				}
@@ -201,49 +195,43 @@ func SyncRepo(prj *Project) error {
 				fmt.Printf("    - Found %d branches\n", len(branches))
 				for _, branch := range branches {
 					fmt.Printf("    - Pushing %s...\n", branch)
-					if err := wikiPrj.PushBranch(branch); err != nil {
+					if err := gitDst.PushLocalBranch(wikiRepo, branch); err != nil {
 						return errors.Wrapf(err, "failed to sync branch %s in wiki", branch)
 					}
 				}
 
-				fmt.Println("  - Pushing tags to GitLab...")
-				if err := wikiPrj.PushAllTags(); err != nil {
+				fmt.Println("  - Pushing tags...")
+				if err := gitDst.PushAllTags(wikiRepo); err != nil {
 					return errors.Wrap(err, "failed to sync tags in wiki")
 				}
 			}
-
-			if err := prj.Prune(); err != nil {
-				return errors.Wrap(err, "failed to prune wiki project")
-			}
+		} else {
+			fmt.Println("  - Source does not support WiKi repository...")
 		}
 	}
 
-	// Sync Releases
-	if !*prj.Config.Releases.Exclude {
+	if !*config.Releases.Exclude && dstID.Repository.Releases {
 		fmt.Println("- Fetching source releases...")
-		releases, err := prj.Source.FetchReleases(prj.SourceUsername, prj.SourceRepository)
+		releases, err := source.FetchReleases(gConfig.Username, remote)
 		if err != nil {
 			return errors.Wrap(err, "failed to fetch releases")
 		}
 
-		if releases == nil {
-			fmt.Println("  - Releases are not supported or they are disabled...")
-		} else {
+		if releases != nil {
 			fmt.Printf("  - Found %d releases\n", len(releases))
 			for _, release := range releases {
 				fmt.Printf("  - Evaluating release %s...\n", release.TagName)
-				exists, err := prj.ReleaseExists(release.TagName)
-				if err != nil {
-					return errors.Wrapf(err, "failed to check for release")
-				}
-
-				if exists {
-					fmt.Println("    - Release already exists, skipping...")
-					continue
+				if exists, err := gitDst.ReleaseExists(repo, release.TagName); err != nil || exists {
+					if err != nil {
+						return errors.Wrapf(err, "failed to check for release")
+					} else {
+						fmt.Println("    - Release already exists, skipping...")
+						continue
+					}
 				}
 
 				fmt.Println("    - Release does not exist, creating...")
-				if err := prj.CreateRelease(release); err != nil {
+				if err := gitDst.CreateRelease(repo, release); err != nil {
 					return errors.Wrap(err, "failed to create release")
 				}
 
@@ -253,18 +241,17 @@ func SyncRepo(prj *Project) error {
 
 					// If asset is not downloaded, then set the original asset url
 					assetURL := asset.URL
-
-					if !*prj.Config.Releases.Assets.Exclude {
+					if !*config.Releases.Assets.Exclude {
 						fmt.Println("      - Downloading...")
 
 						assetBuffer, err := utils.DownloadAsset(asset.URL)
 						if err != nil {
-							return errors.Wrap(err, "failed to download asset")
+							return errors.Wrap(err, "failed to download asset: "+asset.URL)
 						}
 
 						assetShouldBeUploaded := true
 
-						maxSize := *prj.Config.Releases.Assets.MaxSize
+						maxSize := *config.Releases.Assets.MaxSize
 						if maxSize != "none" {
 							maxSizeBytes := utils.ConvertToBytes(maxSize)
 
@@ -279,23 +266,25 @@ func SyncRepo(prj *Project) error {
 						if assetShouldBeUploaded {
 							fmt.Println("      - Uploading asset to storage...")
 
-							assetURL = fmt.Sprintf("/gitlab/projects/prj_%d/tag_%s/%s",
-								repoID,
+							assetURL = fmt.Sprintf("/%s/repositories/repo_%s/tag_%s/%s",
+								dstID.ID,
+								repo.ID,
 								strings.ReplaceAll(release.TagName, "/", "-"),
 								strings.ReplaceAll(asset.Name, "/", "-"),
 							)
 
-							if err := prj.DestinationStorage.UploadFIle(assetBuffer, assetURL); err != nil {
+							url, err := storageDst.UploadFile(assetBuffer, assetURL)
+							if err != nil {
 								return errors.Wrap(err, "failed to upload asset")
 							}
 
-							assetURL = prj.DestinationStorage.URL.JoinPath(assetURL).String()
+							assetURL = url
 						}
 					}
 
 					// Link asset
 					fmt.Println("      - Linking asset to GitLab...")
-					if err := prj.LinkAsset(release.TagName, asset.Name, assetURL); err != nil {
+					if err := gitDst.LinkAsset(repo, release.TagName, asset.Name, assetURL); err != nil {
 						return errors.Wrap(err, "failed to link asset in gitlab")
 					}
 
@@ -305,9 +294,9 @@ func SyncRepo(prj *Project) error {
 		}
 	}
 
-	if prj.SourceRepository.Archived {
+	if remote.Archived {
 		fmt.Println("- Changing repository state to archived")
-		if err := prj.ChangeArchivedState(true); err != nil {
+		if err := gitDst.ChangeArchivedState(repo, true); err != nil {
 			return errors.Wrap(err, "failed to change project state")
 		}
 	}

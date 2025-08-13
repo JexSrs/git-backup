@@ -1,0 +1,183 @@
+{
+    // Global configuration that applies to all sourced groups and repositories unless specifically overridden locally.
+    "config": {
+        // Determines whether to fetch the repository's avatar (true) or not (false); defaults to true
+        // Applicable only for gitlab sources
+        "fetch_avatar": true,
+        "destination": "gitlab",
+        "wiki": {
+            // Determines whether wiki syncing is excluded (true) or included (false); defaults to false
+            "exclude": false
+        },
+        "releases": {
+            // Determines whether syncing of releases and their assets is excluded (true) or included (false); defaults to false
+            "exclude": false,
+            "assets": {
+                "destination": "dufs",
+                // If true, assets will not be downloaded but will be linked directly from the original source URL; defaults to false.
+                "exclude": false,
+                // Maximum allowed size of assets to be synced. If set to "none", all assets will be synced regardless of size.
+                "max_size": "1GB"
+            }
+        }
+    },
+    // Global filters that apply to all sourced groups and repositories unless specifically overridden locally.
+    "filter": {
+        "visibility": ["private", "public"], // Fetch both private and public repositories
+        "archived": null, // Fetch only archived (true) or only unarchived (false)
+        "has_description": null, // Fetch repositories that have their description populated (true) or empty (false)
+        "license": null, // Filter based on specific licenses ["MIT"], empty string inside the array means it does not have a license
+        "topics": null, // Filter based on specific topics ["machine-learning", "typescript"]
+        "pages": null, // Fetch repositories that have their pages enabled (true) or disabled (false)
+        "discussions": null, // Fetch repositories that have their discussion enabled (true) or disabled (false)
+        "forked": null, // Fetch repositories that have been forked (true) or not (false)
+        "name": null, // Filter repositories using regex on the name
+        "language": null, // Filter based on the primary language of the repository ["typescript", "go"]
+        // Fetch repositories with a specific number of stars
+        "stars": {
+            "min": 0,
+            "max": null
+        },
+        // Fetch repositories with a specific number of watchers
+        "watchers": {
+            "min": 0,
+            "max": null
+        },
+        // Fetch repositories with a specific number of forks
+        "forks": {
+            "min": 0,
+            "max": null
+        },
+        // Fetch repositories with a specific number of branches
+        "branches": {
+            "min": 0,
+            "max": null
+        },
+        // Fetch repositories with a specific number of tags
+        "tags": {
+            "min": 0,
+            "max": null
+        },
+        // Fetch repositories that where created between a specific timeframe
+        "created": {
+            "min": "2000-01-01T00:00:00Z",
+            "max": null
+        },
+        // Fetch repositories that where updated between a specific timeframe
+        "updated": {
+            "min": "2000-01-01T00:00:00Z",
+            "max": null
+        },
+        // Fetch repositories with a specified size (in bytes)
+        "size": {
+            "min": 0,
+            "max": null
+        },
+        "issues": {
+            // Fetch repositories that have their issues enabled (true) or disabled (false)
+            "enabled": true,
+            // Fetch repositories with a specific number of open issues
+            "open": {
+                "min": 0,
+                "max": null
+            }
+        }
+    },
+    "destinations": [
+        // Configuration settings for the destination GitLab server where repositories will be saved.
+        {
+            "id": "gitlab",
+            "url": "https://gitlab.com/", // URL of the GitLab instance; defaults to "https://gitlab.com/" when empty.
+            "token": "" // Personal access token for GitLab user authentication.
+        },
+        // Configuration settings for the destination DUFS server where assets will be saved.
+        {
+            "id": "dufs",
+            "url": "https://dufs.home.local" // URL of the DUFS instance
+        },
+        {
+            "id": "gitea",
+            "url": "https://gitea.home.local", // URL of the Gitea instance;
+            "token": "" // Personal access token for Gitea user authentication.
+        }
+    ],
+    // Defines the source platforms from which repositories will be synced.
+    "sources": [
+        {
+            "id": "github",
+            "token": "", // Personal access token for GitHub user authentication.
+            // Overrides global configuration for GitHub-sourced repositories, if specified.
+            "config": {/*...*/},
+            // Overrides global filters for GitHub-sourced repositories, if specified.
+            "filter": {/*...*/}
+        },
+        {
+            "id": "huggingface",
+            "token": "", // Personal access token for HuggingFace user authentication.
+            // Overrides global configuration for HuggingFace-sourced repositories, if specified.
+            "config": {/*...*/},
+            // Overrides global filters for HuggingFace-sourced repositories, if specified.
+            "filter": {/*...*/}
+        },
+        {
+            "id": "gitlab",
+            "token": "", // Personal access token for GitLab user authentication.
+            // Overrides global configuration for GitLab-sourced repositories, if specified.
+            "config": {/*...*/},
+            // Overrides global filters for GitLab-sourced repositories, if specified.
+            "filter": {/*...*/}
+        },
+        {
+            "id": "gitlab-custom-1", // Prefix "gitlab" + anything else (must be unique)
+            "base_url": "https://gitlab.example.com", // The base url of the gitlab instance
+            "token": "", // Personal access token for GitLab user authentication.
+            "config": {/*...*/},
+            "filter": {/*...*/}
+        }
+    ],
+    // Configuration for specific groups of repositories
+    "groups": [
+        {
+            "source": "github", // Indicates the source platform: either "github", "gitlab" or "huggingface".
+            "username": "opensearch-project", // Username of the group in the source platform.
+            "gitlab_group_id": 1227, // Parent GitLab group ID where the repositories will be saved.
+            "include_only": ["OpenSearch"], // If set, only specified repositories will be synced.
+            // Local overriding configuration specific to this group.
+            "config": {/*...*/},
+            // Local overriding filters specific to this group.
+            "filter": {/*...*/},
+            // Configuration of specific repositories. If empty, will use group's configuration.
+            "repositories": [
+                {
+                    "name": "OpenSearch", // Name of the repository.
+                    // Local overriding filters specific to this repository, e.x. fetch only if when stars exceed the number 10
+                    "filter": {
+                        "stars": {
+                            "min": 10
+                        }
+                    },
+                    // Local overriding configuration specific to this repository.,
+                    "wiki": {
+                        "exclude": true
+                    },
+                    "releases": {
+                        "exclude": true,
+                        "assets": {
+                            "exclude": true,
+                            "threshold": 5,
+                            "max_size": "1GB"
+                        }
+                    }
+                }
+                // Additional repositories can be specified here...
+            ]
+        },
+        {
+            "source": "huggingface",
+            "username": "ilsp",
+            "gitlab_group_id": 7107,
+            "exclude": [""] // If set, will exclude all mentioned repositories
+        }
+        // Additional groups can be specified here...
+    ]
+}

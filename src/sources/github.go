@@ -23,8 +23,29 @@ type GithubRepository struct {
 	Name        string  `json:"name"`
 	URL         string  `json:"clone_url"`
 	Description *string `json:"description"`
-	Private     bool    `json:"private"`
-	Archived    bool    `json:"archived"`
+	License     struct {
+		Key  string `json:"key"`
+		Name string `json:"name"`
+	} `json:"license"`
+	Topics   []string `json:"topics"`
+	Language string   `json:"language"`
+
+	Private        bool `json:"private"`
+	Archived       bool `json:"archived"`
+	HasPages       bool `json:"has_pages"`
+	HasDiscussions bool `json:"has_discussions"`
+	IsFork         bool `json:"fork"`
+
+	IssuesEnabled bool `json:"has_issues"`
+	OpenIssues    int  `json:"open_issues_count"`
+
+	Stars    int `json:"stargazers_count"`
+	Watchers int `json:"watchers_count"`
+	Forks    int `json:"forks_count"`
+	Size     int `json:"size"`
+
+	CreatedAt string `json:"created_at"`
+	UpdatedAt string `json:"updated_at"`
 }
 
 type GithubRelease struct {

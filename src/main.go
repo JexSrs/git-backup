@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/yosuke-furukawa/json5/encoding/json5"
+	"github.com/muhammadmuzzammil1998/jsonc"
 	"log"
 	"main/src/configuration"
 	"main/src/dest"
@@ -17,7 +17,7 @@ func main() {
 	}
 
 	var config configuration.Configuration
-	err = json5.Unmarshal(file, &config)
+	err = jsonc.Unmarshal(file, &config)
 	if err != nil {
 		log.Fatal("Could not parse configuration file:", err)
 	}
@@ -28,29 +28,41 @@ func main() {
 		log.Fatal("Configuration error:", err)
 	}
 
-	gitlab := dest.NewGitLab(config.Gitlab)
-	dufs := dest.NewDufs(config.Dufs)
-
 	srcs := mapSources(config)
+	dsts := mapDestinations(config)
+
 	for _, configRepo := range config.Groups {
 		source := srcs[configRepo.Source]
 		if source == nil {
 			log.Fatalf("source '%s' not found in group with username '%s'", configRepo.Source, configRepo.Username)
 		}
 
-		SyncUser(gitlab, dufs, configRepo, source)
+		SyncUser(dsts, configRepo, source)
 	}
 }
 
 func mapSources(config configuration.Configuration) map[string]sources.Source {
 	ret := map[string]sources.Source{}
 	for _, source := range config.Sources {
-		if strings.HasPrefix(source.Id, "github") {
-			ret[source.Id] = sources.NewGithub(source.Token)
-		} else if strings.HasPrefix(source.Id, "huggingface") {
-			ret[source.Id] = sources.NewHuggingFace(source.Token)
-		} else if strings.HasPrefix(source.Id, "gitlab") {
-			ret[source.Id] = sources.NewGitlab(source.BaseURL, source.Token)
+		if strings.HasPrefix(source.ID, "github") {
+			ret[source.ID] = sources.NewGithub(source.Token)
+		} else if strings.HasPrefix(source.ID, "huggingface") {
+			ret[source.ID] = sources.NewHuggingFace(source.Token)
+		} else if strings.HasPrefix(source.ID, "gitlab") {
+			ret[source.ID] = sources.NewGitlab(source.BaseURL, source.Token)
+		}
+	}
+
+	return ret
+}
+
+func mapDestinations(config configuration.Configuration) map[string]dest.Destination {
+	ret := map[string]dest.Destination{}
+	for _, dst := range config.Destinations {
+		if strings.HasPrefix(dst.ID, "gitlab") {
+			ret[dst.ID] = dest.NewGitLab(dst.ID, dst.URL, dst.Token)
+		} else if strings.HasPrefix(dst.ID, "dufs") {
+			ret[dst.ID] = dest.NewDufs(dst.ID, dst.URL)
 		}
 	}
 

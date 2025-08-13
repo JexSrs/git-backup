@@ -4,8 +4,8 @@ go 1.20
 
 require (
 	github.com/go-git/go-git/v5 v5.12.0
+	github.com/muhammadmuzzammil1998/jsonc v1.0.0
 	github.com/pkg/errors v0.9.1
-	github.com/yosuke-furukawa/json5 v0.1.1
 )
 
 require (
