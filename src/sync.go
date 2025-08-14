@@ -79,14 +79,15 @@ func SyncRepo(
 	}
 
 	if repo == nil {
-		fmt.Println("- Repository does not exist in destination...")
+		fmt.Println("- Repository does not exist in destination")
+		fmt.Println("- Importing...")
 		repo, err = gitDst.ImportRepository(gConfig, remote, source)
 		if err != nil {
 			return errors.Wrap(err, "failed to import project")
 		}
-		fmt.Println("- Imported new repository in destination with identification:", repo.ID)
+		fmt.Println("- Imported new repository with id:", repo.ID)
 
-		fmt.Println("- Setting 'original_url' attribute with value:", remote.URL)
+		fmt.Println("- Setting 'original_url' attribute:", remote.URL)
 		if err := gitDst.SetOriginalUrl(repo, remote.URL); err != nil {
 			return errors.Wrap(err, "failed to set original url")
 		}
@@ -103,17 +104,17 @@ func SyncRepo(
 		fmt.Printf("- Found %d protected branches\n", len(protectedBranches))
 
 		if len(protectedBranches) != 0 {
-			fmt.Println("  - Unprotecting branches...")
+			fmt.Println("- Unprotecting branches...")
 		}
 
 		for _, branch := range protectedBranches {
-			fmt.Printf("    - Unprotecting %s...\n", branch)
+			fmt.Printf("  - Unprotecting %s...\n", branch)
 			if err := gitDst.UnprotectBranch(repo, branch); err != nil {
 				return errors.Wrapf(err, "failed to unprotect branch %s", branch)
 			}
 		}
 	} else {
-		fmt.Println("- Repository already exists in destination with identification", repo.ID)
+		fmt.Println("- Repository already exists in destination with id", repo.ID)
 		fmt.Println("- Cloning repository from source...")
 		if err := repo.CloneFromSource(source); err != nil {
 			return errors.Wrap(err, "failed to clone source")
@@ -135,7 +136,7 @@ func SyncRepo(
 			return errors.Wrap(err, "failed to change project archive state")
 		}
 
-		fmt.Println("- Pushing branches to destination...")
+		fmt.Println("- Pushing branches...")
 		branches, err := repo.GetLocalBranches()
 		if err != nil {
 			return errors.Wrap(err, "failed to retrieve local branches")
@@ -165,12 +166,10 @@ func SyncRepo(
 				return errors.Wrap(err, "failed to download avatar")
 			}
 
-			fmt.Println("  - Uploading avatar to destination...")
+			fmt.Println("  - Uploading avatar...")
 			if err := gitDst.ChangeAvatar(repo, avatarBuffer, ext); err != nil {
-				return errors.Wrap(err, "failed to link avatar in destination")
+				return errors.Wrap(err, "failed to upload avatar")
 			}
-
-			fmt.Println("  - Done")
 		}
 	}
 
@@ -181,36 +180,41 @@ func SyncRepo(
 			if err := wikiRepo.CloneFromSource(source); err == nil {
 				defer func() {
 					if err := wikiRepo.Prune(); err != nil {
-						fmt.Println(errors.Wrap(err, "failed to prune wiki project"))
+						fmt.Println(errors.Wrap(err, "wiki: failed to prune project"))
 					}
 				}()
 
-				fmt.Println("  - Found remote Wiki, adding remote...")
+				fmt.Println("  - Found Wiki, adding remote...")
 				if err := gitDst.AddRemoteToRepo(wikiRepo); err != nil {
-					return errors.Wrap(err, "failed to add destination as a remote repository in wiki")
+					return errors.Wrap(err, "wiki: failed to add destination as a remote repository")
+				}
+
+				fmt.Println("  - Creating new Wiki project if it does not exist...")
+				if err := gitDst.CreateWiki(repo, gConfig); err != nil {
+					return errors.Wrap(err, "wiki: failed to create project")
 				}
 
 				fmt.Println("  - Pushing branches to destination...")
 				branches, err := wikiRepo.GetLocalBranches()
 				if err != nil {
-					return errors.Wrap(err, "failed to retrieve branches in wiki")
+					return errors.Wrap(err, "wiki: failed to retrieve branches")
 				}
 
 				fmt.Printf("    - Found %d branches\n", len(branches))
 				for _, branch := range branches {
 					fmt.Printf("    - Pushing %s...\n", branch)
 					if err := wikiRepo.PushLocalBranch(branch, dstID.ID); err != nil {
-						return errors.Wrapf(err, "failed to sync branch %s in wiki", branch)
+						return errors.Wrapf(err, "wiki: failed to sync branch %s", branch)
 					}
 				}
 
 				fmt.Println("  - Pushing tags...")
 				if err := wikiRepo.PushAllTags(dstID.ID); err != nil {
-					return errors.Wrap(err, "failed to sync tags in wiki")
+					return errors.Wrap(err, "wiki: failed to sync tags")
 				}
 			}
 		} else {
-			fmt.Println("  - Source does not support WiKi repository...")
+			fmt.Println("  - Source does not support WiKi")
 		}
 	}
 
@@ -218,7 +222,7 @@ func SyncRepo(
 		fmt.Println("- Fetching source releases...")
 		releases, err := source.FetchReleases(gConfig.Username, remote)
 		if err != nil {
-			return errors.Wrap(err, "failed to fetch releases")
+			return errors.Wrap(err, "releases: failed to fetch")
 		}
 
 		if releases != nil {
@@ -227,7 +231,7 @@ func SyncRepo(
 				fmt.Printf("  - Evaluating release %s...\n", release.TagName)
 				if exists, err := gitDst.ReleaseExists(repo, release.TagName); err != nil || exists {
 					if err != nil {
-						return errors.Wrapf(err, "failed to check for release")
+						return errors.Wrapf(err, "release: failed to check existence")
 					} else {
 						fmt.Println("    - Release already exists, skipping...")
 						continue
@@ -236,7 +240,7 @@ func SyncRepo(
 
 				fmt.Println("    - Release does not exist, creating...")
 				if err := gitDst.CreateRelease(repo, release); err != nil {
-					return errors.Wrap(err, "failed to create release")
+					return errors.Wrap(err, "release: failed to create")
 				}
 
 				fmt.Printf("    - Found %d assets\n", len(release.Assets))
@@ -250,7 +254,7 @@ func SyncRepo(
 
 						assetBuffer, err := utils.DownloadAsset(asset.URL)
 						if err != nil {
-							return errors.Wrap(err, "failed to download asset: "+asset.URL)
+							return errors.Wrap(err, "asset: failed to download: "+asset.URL)
 						}
 
 						assetShouldBeUploaded := true
@@ -279,7 +283,7 @@ func SyncRepo(
 
 							url, err := storageDst.UploadFile(assetBuffer, assetURL)
 							if err != nil {
-								return errors.Wrap(err, "failed to upload asset")
+								return errors.Wrap(err, "asset: failed to upload")
 							}
 
 							assetURL = url
@@ -289,7 +293,7 @@ func SyncRepo(
 					// Link asset
 					fmt.Println("      - Linking asset to release...")
 					if err := gitDst.LinkAsset(repo, release, asset.Name, assetURL); err != nil {
-						return errors.Wrap(err, "failed to link asset")
+						return errors.Wrap(err, "asset: failed to link")
 					}
 
 					fmt.Println("      - Done")

@@ -104,6 +104,10 @@ func (g *Dufs) GetWikiProject(repo *Repository, gConfig configuration.ConfigGrou
 	return nil
 }
 
+func (g *Dufs) CreateWiki(repo *Repository, gConfig configuration.ConfigGroup) error {
+	return fmt.Errorf("not implemented")
+}
+
 func (d *Dufs) UploadFile(buffer *bytes.Buffer, dstPath string) (string, error) {
 	request, err := http.NewRequest(http.MethodPut, d.URL.JoinPath(d.RootPath, dstPath).String(), buffer)
 	if err != nil {

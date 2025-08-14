@@ -399,6 +399,26 @@ func (g *Gitea) GetWikiProject(repo *Repository, gConfig configuration.ConfigGro
 	}
 }
 
+func (g *Gitea) CreateWiki(repo *Repository, gConfig configuration.ConfigGroup) error {
+	data, _ := json.Marshal(map[string]any{
+		"content_base64": "",
+		"message":        "Init wiki project",
+		"title":          "_Init_",
+	})
+
+	_path := fmt.Sprintf("/api/v1/repos/%s/%s/wiki/new", gConfig.GiteaUsername, repo.Name)
+	res, err := g.request(http.MethodPost, _path, bytes.NewBuffer(data), "application/json")
+	if err != nil {
+		return fmt.Errorf("creating request: %w", err)
+	}
+
+	if res.Status != http.StatusCreated && strings.Contains(string(res.Body), "wiki page already exists") {
+		return fmt.Errorf("invalid response: %d %s", res.Status, res.Body)
+	}
+
+	return nil
+}
+
 func (g *Gitea) UploadFile(buffer *bytes.Buffer, dstPath string) (string, error) {
 	return "", fmt.Errorf("not implemented")
 }

@@ -388,6 +388,11 @@ func (g *GitLab) GetWikiProject(repo *Repository, gConfig configuration.ConfigGr
 	}
 }
 
+func (g *GitLab) CreateWiki(repo *Repository, gConfig configuration.ConfigGroup) error {
+	// Gitlab automatically creates the wiki on git push
+	return nil
+}
+
 func (g *GitLab) UploadFile(buffer *bytes.Buffer, dstPath string) (string, error) {
 	return "", fmt.Errorf("not implemented")
 }

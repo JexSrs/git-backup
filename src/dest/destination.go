@@ -151,6 +151,7 @@ type Destination interface {
 	LinkAsset(repo *Repository, release sources.SourceRelease, assetName, assetUrl string) error
 
 	GetWikiProject(repo *Repository, gConfig configuration.ConfigGroup, source sources.Source) *Repository
+	CreateWiki(repo *Repository, gConfig configuration.ConfigGroup) error
 
 	UploadFile(buffer *bytes.Buffer, dstPath string) (string, error)
 }
