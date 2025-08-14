@@ -49,7 +49,6 @@ func SyncUser(dst map[string]dest.Destination, groupCfg configuration.ConfigGrou
 			cfg := groupCfg.GetConfig(remote.Name)
 			if err := SyncRepo(dst, source, remote, cfg, groupCfg); err != nil {
 				fmt.Println(err)
-				panic(err)
 			}
 
 			count++
