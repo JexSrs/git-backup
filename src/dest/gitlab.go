@@ -4,9 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
-	"github.com/go-git/go-git/v5/plumbing"
 	"io"
 	"main/src/configuration"
 	"main/src/sources"
@@ -14,8 +12,6 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/url"
-	"os"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -26,6 +22,8 @@ type GitLab struct {
 	ID       string
 	URL      url.URL
 	APIToken string
+
+	client *http.Client
 }
 
 func NewGitLab(id, baseUrl, token string) *GitLab {
@@ -35,15 +33,18 @@ func NewGitLab(id, baseUrl, token string) *GitLab {
 		ID:       id,
 		URL:      *gitlabUrl,
 		APIToken: token,
+		client: &http.Client{
+			Timeout: time.Second * 60,
+		},
 	}
 }
 
-type Response struct {
+type gitlabResponse struct {
 	Status int
 	Body   []byte
 }
 
-type project struct {
+type gitlabProject struct {
 	ID                *int    `json:"id"`
 	Name              string  `json:"name"`
 	HttpUrl           *string `json:"http_url_to_repo"`
@@ -51,7 +52,7 @@ type project struct {
 	ParentGroupID     int
 }
 
-type reqGroup struct {
+type gitlabReqGroup struct {
 	ID   int    `json:"id"`
 	Name string `json:"name"`
 	Path string `json:"path"`
@@ -60,7 +61,7 @@ type reqGroup struct {
 	Avatar     *string `json:"avatar_url"`
 }
 
-func (g *GitLab) request(method, path string, data *bytes.Buffer, contentType string) (*Response, error) {
+func (g *GitLab) request(method, path string, data *bytes.Buffer, contentType string) (*gitlabResponse, error) {
 	pathQuery := strings.Split(path, "?")
 
 	urlPath := g.URL.JoinPath(pathQuery[0])
@@ -89,8 +90,7 @@ func (g *GitLab) request(method, path string, data *bytes.Buffer, contentType st
 	req.Header.Add("Private-Token", g.APIToken)
 	req.Header.Add("Accept", "*/*")
 
-	client := &http.Client{}
-	res, err := client.Do(req)
+	res, err := g.client.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +101,7 @@ func (g *GitLab) request(method, path string, data *bytes.Buffer, contentType st
 		return nil, err
 	}
 
-	return &Response{
+	return &gitlabResponse{
 		Status: res.StatusCode,
 		Body:   body,
 	}, nil
@@ -138,7 +138,7 @@ func (g *GitLab) RetrieveExistingRepo(gConfig configuration.ConfigGroup, remote 
 		return nil, nil
 	}
 
-	var projects []project
+	var projects []gitlabProject
 	err = json.Unmarshal(body.Body, &projects)
 	if err != nil {
 		return nil, err
@@ -161,11 +161,11 @@ func (g *GitLab) RetrieveExistingRepo(gConfig configuration.ConfigGroup, remote 
 }
 
 func (g *GitLab) ImportRepository(gConfig configuration.ConfigGroup, remote sources.SourceRepository, source sources.Source) (*Repository, error) {
-	if isReservedName(remote.Name) {
+	if isReservedGitlabName(remote.Name) {
 		return nil, fmt.Errorf("repository name %s is reserved", remote.Name)
 	}
 
-	if !isValidName(remote.Name) {
+	if !isValidGitlabName(remote.Name) {
 		return nil, fmt.Errorf("invalid repository name: %s", remote.Name)
 	}
 
@@ -192,7 +192,7 @@ func (g *GitLab) ImportRepository(gConfig configuration.ConfigGroup, remote sour
 		return nil, fmt.Errorf("invalid response: %d %s", body.Status, body.Body)
 	}
 
-	var result project
+	var result gitlabProject
 	if err := json.Unmarshal(body.Body, &result); err != nil {
 		return nil, fmt.Errorf("parsing JSON response: %w", err)
 	}
@@ -273,25 +273,9 @@ func (g *GitLab) UnprotectBranch(repo *Repository, branch string) error {
 	return err
 }
 
-func (g *GitLab) CloneFromSource(repo *Repository, source sources.Source) error {
-	path := filepath.Join("/tmp/git-backup/", repo.Name)
-	os.RemoveAll(path)
-
-	r, err := git.PlainClone(path, false, &git.CloneOptions{
-		URL: source.AddTokenToCloneUrl(repo.Remote.URL),
-	})
-
-	if err != nil {
-		return err
-	}
-
-	repo.LocalRepository = r
-	return nil
-}
-
 func (g *GitLab) AddRemoteToRepo(repo *Repository) error {
 	if repo.LocalRepository == nil {
-		return fmt.Errorf("no local repository found for project %d", repo.ID)
+		return fmt.Errorf("no local repository found for gitlabProject %d", repo.ID)
 	}
 
 	// Create url
@@ -321,72 +305,6 @@ func (g *GitLab) ChangeArchivedState(repo *Repository, isArchived bool) error {
 
 	if res.Status != http.StatusCreated {
 		return fmt.Errorf("invalid response: %d %s", res.Status, res.Body)
-	}
-
-	return nil
-}
-
-func (g *GitLab) GetLocalBranches(repo *Repository) ([]string, error) {
-	if repo.LocalRepository == nil {
-		return nil, fmt.Errorf("no repository found for project %d", repo.ID)
-	}
-
-	branches, err := repo.LocalRepository.Branches()
-	if err != nil {
-		return nil, err
-	}
-
-	names := make([]string, 0)
-	branches.ForEach(func(ref *plumbing.Reference) error {
-		name := ref.Name().String()
-
-		// For Gitlab sources
-		if strings.HasPrefix(name, "refs/heads/") {
-			name = strings.TrimPrefix(name, "refs/heads/")
-		}
-
-		names = append(names, name)
-		return nil
-	})
-
-	return names, nil
-}
-
-func (g *GitLab) PushLocalBranch(repo *Repository, branch string) error {
-	if repo.LocalRepository == nil {
-		return fmt.Errorf("no repository found for project %d", repo.ID)
-	}
-
-	pushOptions := &git.PushOptions{
-		RemoteName: "gitlab",
-		RefSpecs: []config.RefSpec{
-			config.RefSpec("refs/heads/" + branch + ":refs/heads/" + branch),
-		},
-		Force: true,
-	}
-
-	// Perform the push
-	if err := repo.LocalRepository.Push(pushOptions); err != nil && err.Error() != "already up-to-date" {
-		return err
-	}
-
-	return nil
-}
-
-func (g *GitLab) PushAllTags(repo *Repository) error {
-	if repo.LocalRepository == nil {
-		return fmt.Errorf("no repository found for project %d", repo.ID)
-	}
-
-	pushOptions := &git.PushOptions{
-		RemoteName: "gitlab",
-		RefSpecs:   []config.RefSpec{"refs/tags/*:refs/tags/*"},
-		Force:      true,
-	}
-
-	// Perform the push
-	if err := repo.LocalRepository.Push(pushOptions); err != nil && err.Error() != "already up-to-date" {
-		return err
 	}
 
 	return nil
@@ -429,8 +347,8 @@ func (g *GitLab) CreateRelease(repo *Repository, release sources.SourceRelease) 
 	return nil
 }
 
-func (g *GitLab) LinkAsset(repo *Repository, tagName, assetName, assetUrl string) error {
-	eTag := url.QueryEscape(tagName)
+func (g *GitLab) LinkAsset(repo *Repository, release sources.SourceRelease, assetName, assetUrl string) error {
+	eTag := url.QueryEscape(release.TagName)
 
 	data := url.Values{}
 	data.Add("name", assetName)
@@ -474,7 +392,7 @@ func (g *GitLab) UploadFile(buffer *bytes.Buffer, dstPath string) (string, error
 	return "", fmt.Errorf("not implemented")
 }
 
-func isValidName(name string) bool {
+func isValidGitlabName(name string) bool {
 	// Rule 1: can only include letters, digits, spaces, '_', '-', and '.'
 	validChars := regexp.MustCompile(`^[a-zA-Z0-9_. -]+$`)
 	if !validChars.MatchString(name) {
@@ -494,7 +412,7 @@ func isValidName(name string) bool {
 	return true
 }
 
-func isReservedName(name string) bool {
+func isReservedGitlabName(name string) bool {
 	rn := []string{
 		"badges",
 		"blame",
@@ -609,7 +527,7 @@ func (g *GitLab) getGroupIdByName(parentGroupId int, group sources.SourceReposit
 		return -1, nil
 	}
 
-	var groups []reqGroup
+	var groups []gitlabReqGroup
 	err = json.Unmarshal(body.Body, &groups)
 	if err != nil {
 		return -1, err
@@ -640,7 +558,7 @@ func (g *GitLab) createGroup(parentGroupId int, group sources.SourceRepositoryGr
 		return -1, fmt.Errorf("failed to create group %s: %s", group.Name, body.Body)
 	}
 
-	var newGroup reqGroup
+	var newGroup gitlabReqGroup
 	err = json.Unmarshal(body.Body, &newGroup)
 	if err != nil {
 		return -1, err

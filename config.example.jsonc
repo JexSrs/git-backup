@@ -177,6 +177,12 @@
             "username": "ilsp",
             "gitlab_group_id": 7107,
             "exclude": [""] // If set, will exclude all mentioned repositories
+        },
+        {
+            "source": "huggingface",
+            "destination": "gitea",
+            "username": "ilsp",
+            "gitea_username": "ilsp-copy" // Defaults to username
         }
         // Additional groups can be specified here...
     ]

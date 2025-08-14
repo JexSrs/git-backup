@@ -96,7 +96,7 @@ func (g *Dufs) CreateRelease(repo *Repository, release sources.SourceRelease) er
 	return fmt.Errorf("not implemented")
 }
 
-func (g *Dufs) LinkAsset(repo *Repository, tagName, assetName, assetUrl string) error {
+func (g *Dufs) LinkAsset(repo *Repository, release sources.SourceRelease, assetName, assetUrl string) error {
 	return fmt.Errorf("not implemented")
 }
 

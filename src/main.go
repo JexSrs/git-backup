@@ -63,6 +63,8 @@ func mapDestinations(config configuration.Configuration) map[string]dest.Destina
 			ret[dst.ID] = dest.NewGitLab(dst.ID, dst.URL, dst.Token)
 		} else if strings.HasPrefix(dst.ID, "dufs") {
 			ret[dst.ID] = dest.NewDufs(dst.ID, dst.URL)
+		} else if strings.HasPrefix(dst.ID, "gitea") {
+			ret[dst.ID] = dest.NewGitea(dst.ID, dst.URL, dst.Token)
 		}
 	}
 

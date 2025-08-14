@@ -36,7 +36,7 @@ func (c *Configuration) GetDestination(id string) *ConfigDestination {
 
 type ConfigDestination struct {
 	ID    string `json:"id"`
-	URL   string `json:"base_url"`
+	URL   string `json:"url"`
 	Token string `json:"token"`
 }
 
@@ -111,9 +111,11 @@ type ConfigFilterIssues struct {
 // Repositories configuration
 
 type ConfigGroup struct {
-	Source        string `json:"source"`
-	Username      string `json:"username"`
+	Source   string `json:"source"`
+	Username string `json:"username"`
+
 	GitlabGroupID int    `json:"gitlab_group_id"`
+	GiteaUsername string `json:"gitea_username"`
 
 	Skip   *int         `json:"skip"`
 	Filter ConfigFilter `json:"filter"`
@@ -190,6 +192,10 @@ func (c *Configuration) PopulateDefault() {
 
 		if group.Skip == nil {
 			group.Skip = utils.Pointer(0)
+		}
+
+		if len(group.GiteaUsername) == 0 {
+			group.GiteaUsername = group.Username
 		}
 
 		source := c.GetSource(group.Source)
