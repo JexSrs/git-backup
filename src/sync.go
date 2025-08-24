@@ -49,6 +49,7 @@ func SyncUser(dst map[string]dest.Destination, groupCfg configuration.ConfigGrou
 			cfg := groupCfg.GetConfig(remote.Name)
 			if err := SyncRepo(dst, source, remote, cfg, groupCfg); err != nil {
 				fmt.Println(err)
+				panic(err)
 			}
 
 			count++
@@ -77,23 +78,28 @@ func SyncRepo(
 		return errors.Wrap(err, "failed to retrieve existing repo")
 	}
 
-	if repo == nil {
-		fmt.Println("- Repository does not exist in destination")
-		fmt.Println("- Importing...")
-		repo, err = gitDst.ImportRepository(gConfig, remote, source)
-		if err != nil {
-			return errors.Wrap(err, "failed to import project")
-		}
-		fmt.Println("- Imported new repository with id:", repo.ID)
-
-		fmt.Println("- Setting 'original_url' attribute:", remote.URL)
-		if err := gitDst.SetOriginalUrl(repo, remote.URL); err != nil {
-			return errors.Wrap(err, "failed to set original url")
+	if repo == nil || !repo.FinishedMiration {
+		if repo == nil {
+			fmt.Println("- Repository does not exist in destination")
+			fmt.Println("- Importing...")
+			repo, err = gitDst.ImportRepository(gConfig, remote, source)
+			if err != nil {
+				return errors.Wrap(err, "failed to import project")
+			}
+			fmt.Println("- Imported new repository with id:", repo.ID)
+		} else {
+			fmt.Println("- Repository already exists in destination with id", repo.ID)
+			fmt.Println("  - Migration has not finished")
 		}
 
 		fmt.Println("- Waiting for repository import to finish...")
 		if err := gitDst.LockUntilImport(repo); err != nil {
 			return errors.Wrap(err, "failed to read import status")
+		}
+
+		fmt.Println("- Setting 'original_url' attribute:", remote.URL)
+		if err := gitDst.SetOriginalUrl(repo, remote.URL); err != nil {
+			return errors.Wrap(err, "failed to set original url")
 		}
 
 		protectedBranches, err := gitDst.GetProtectedBranches(repo)

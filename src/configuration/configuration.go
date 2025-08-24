@@ -3,7 +3,9 @@ package configuration
 import (
 	"fmt"
 	"main/src/utils"
+	"net/url"
 	"strings"
+	"time"
 )
 
 type Configuration struct {
@@ -35,19 +37,21 @@ func (c *Configuration) GetDestination(id string) *ConfigDestination {
 // Destinations configuration
 
 type ConfigDestination struct {
-	ID    string `json:"id"`
-	URL   string `json:"url"`
-	Token string `json:"token"`
+	ID      string        `json:"id"`
+	URL     string        `json:"url"`
+	Token   string        `json:"token"`
+	Timeout time.Duration `json:"timeout"`
 }
 
 // Sources configuration
 
 type ConfigSource struct {
-	ID      string       `json:"id"`
-	BaseURL string       `json:"base_url"`
-	Token   string       `json:"token"`
-	Config  ConfigRepo   `json:"config"`
-	Filter  ConfigFilter `json:"filter"`
+	ID      string        `json:"id"`
+	BaseURL string        `json:"base_url"`
+	Token   string        `json:"token"`
+	Timeout time.Duration `json:"timeout"`
+	Config  ConfigRepo    `json:"config"`
+	Filter  ConfigFilter  `json:"filter"`
 }
 
 // Repository configuration
@@ -181,6 +185,23 @@ func (c *Configuration) PopulateDefault() {
 	for i := range c.Sources {
 		if strings.HasPrefix(c.Sources[i].ID, "gitlab") && len(c.Sources[i].BaseURL) == 0 {
 			c.Sources[i].BaseURL = "https://gitlab.com"
+		}
+
+		if c.Sources[i].Timeout == 0 {
+			c.Sources[i].Timeout = time.Minute * 10
+		} else {
+			c.Sources[i].Timeout = time.Second * c.Sources[i].Timeout // User is passing seconds
+		}
+
+		c.Sources[i].Config.DefaultFrom(c.Config)
+		c.Sources[i].Filter.DefaultFrom(c.Filter)
+	}
+
+	for i := range c.Destinations {
+		if c.Destinations[i].Timeout == 0 {
+			c.Destinations[i].Timeout = time.Minute * 10
+		} else {
+			c.Destinations[i].Timeout = time.Second * c.Destinations[i].Timeout // User is passing seconds
 		}
 
 		c.Sources[i].Config.DefaultFrom(c.Config)
@@ -361,6 +382,20 @@ func (c *ConfigFilter) DefaultFrom(from ConfigFilter) {
 }
 
 func (c *Configuration) Validate() error {
+	for _, source := range c.Sources {
+		_, err := url.Parse(source.BaseURL)
+		if err != nil {
+			return fmt.Errorf("source %s has invalid base url: %w", source.ID, err)
+		}
+	}
+
+	for _, dest := range c.Destinations {
+		_, err := url.Parse(dest.URL)
+		if err != nil {
+			return fmt.Errorf("destination %s has invalid base url: %w", dest.ID, err)
+		}
+	}
+
 	assetsEnabled := !*c.Config.Releases.Assets.Exclude
 	for i, group := range c.Groups {
 		source := c.GetSource(group.Source)

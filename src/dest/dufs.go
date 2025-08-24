@@ -14,14 +14,20 @@ type Dufs struct {
 	ID       string
 	URL      url.URL
 	RootPath string
+
+	client *http.Client
 }
 
-func NewDufs(id, baseUrl string) *Dufs {
-	dufsUrl, _ := url.Parse(baseUrl)
+func NewDufs(config configuration.ConfigDestination) *Dufs {
+	dufsUrl, _ := url.Parse(config.URL)
+
 	return &Dufs{
-		ID:       id,
+		ID:       config.ID,
 		URL:      *dufsUrl,
 		RootPath: "/",
+		client: &http.Client{
+			Timeout: config.Timeout,
+		},
 	}
 }
 
@@ -114,8 +120,7 @@ func (d *Dufs) UploadFile(buffer *bytes.Buffer, dstPath string) (string, error) 
 		return "", fmt.Errorf("error creating request: %w", err)
 	}
 
-	client := &http.Client{}
-	response, err := client.Do(request)
+	response, err := d.client.Do(request)
 	if err != nil {
 		return "", fmt.Errorf("error performing request: %w", err)
 	}

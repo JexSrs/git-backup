@@ -98,7 +98,8 @@
         {
             "id": "gitea",
             "url": "https://gitea.home.local", // URL of the Gitea instance;
-            "token": "" // Personal access token for Gitea user authentication.
+            "token": "", // Personal access token for Gitea user authentication.
+            "timeout": 7200 // Timeout for all HTTP requests in seconds, Defaults to 10 minutes
         }
     ],
     // Defines the source platforms from which repositories will be synced.
@@ -113,6 +114,7 @@
         },
         {
             "id": "huggingface",
+            "timeout": 660, // Timeout for all HTTP requests in seconds, Defaults to 10 minutes
             "token": "", // Personal access token for HuggingFace user authentication.
             // Overrides global configuration for HuggingFace-sourced repositories, if specified.
             "config": {/*...*/},
@@ -182,7 +184,7 @@
             "source": "huggingface",
             "destination": "gitea",
             "username": "ilsp",
-            "gitea_username": "ilsp-copy" // Defaults to username
+            "gitea_username": "ilsp-mirror" // Defaults to username
         }
         // Additional groups can be specified here...
     ]

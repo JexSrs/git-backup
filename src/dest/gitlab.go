@@ -26,15 +26,15 @@ type GitLab struct {
 	client *http.Client
 }
 
-func NewGitLab(id, baseUrl, token string) *GitLab {
-	gitlabUrl, _ := url.Parse(baseUrl)
+func NewGitLab(config configuration.ConfigDestination) *GitLab {
+	gitlabUrl, _ := url.Parse(config.URL)
 
 	return &GitLab{
-		ID:       id,
+		ID:       config.ID,
 		URL:      *gitlabUrl,
-		APIToken: token,
+		APIToken: config.Token,
 		client: &http.Client{
-			Timeout: time.Second * 60,
+			Timeout: config.Timeout,
 		},
 	}
 }
@@ -49,6 +49,7 @@ type gitlabProject struct {
 	Name              string  `json:"name"`
 	HttpUrl           *string `json:"http_url_to_repo"`
 	PathWithNamespace *string `json:"path_with_namespace"`
+	ImportStatus      string  `json:"import_status"`
 	ParentGroupID     int
 }
 
@@ -152,6 +153,7 @@ func (g *GitLab) RetrieveExistingRepo(gConfig configuration.ConfigGroup, remote 
 				Name:              project.Name,
 				HttpUrl:           *project.HttpUrl,
 				PathWithNamespace: *project.PathWithNamespace,
+				FinishedMiration:  project.ImportStatus == "finished" || project.ImportStatus == "none",
 				Remote:            remote,
 			}, nil
 		}

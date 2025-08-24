@@ -10,6 +10,7 @@ import (
 	"main/src/configuration"
 	"main/src/sources"
 	"mime/multipart"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -24,15 +25,15 @@ type Gitea struct {
 	client *http.Client
 }
 
-func NewGitea(id, baseUrl, token string) *Gitea {
-	giteaUrl, _ := url.Parse(baseUrl)
+func NewGitea(config configuration.ConfigDestination) *Gitea {
+	giteaUrl, _ := url.Parse(config.URL)
 
 	return &Gitea{
-		ID:       id,
+		ID:       config.ID,
 		URL:      *giteaUrl,
-		APIToken: token,
+		APIToken: config.Token,
 		client: &http.Client{
-			Timeout: time.Second * 600,
+			Timeout: config.Timeout,
 		},
 	}
 }
@@ -47,6 +48,7 @@ type giteaProject struct {
 	Name              string  `json:"name"`
 	HttpUrl           *string `json:"html_url"`
 	PathWithNamespace *string `json:"full_name"`
+	Empty             bool    `json:"empty"`
 }
 
 type giteaRelease struct {
@@ -124,8 +126,7 @@ func (g *Gitea) RetrieveExistingRepo(gConfig configuration.ConfigGroup, remote s
 	}
 
 	var project giteaProject
-	err = json.Unmarshal(body.Body, &project)
-	if err != nil {
+	if err := json.Unmarshal(body.Body, &project); err != nil {
 		return nil, err
 	}
 
@@ -134,6 +135,7 @@ func (g *Gitea) RetrieveExistingRepo(gConfig configuration.ConfigGroup, remote s
 		Name:              project.Name,
 		HttpUrl:           *project.HttpUrl,
 		PathWithNamespace: *project.PathWithNamespace,
+		FinishedMiration:  !project.Empty,
 		Remote:            remote,
 		ConfigGroup:       gConfig,
 	}, nil
@@ -161,17 +163,27 @@ func (g *Gitea) ImportRepository(gConfig configuration.ConfigGroup, remote sourc
 	}
 
 	js, _ := json.Marshal(data)
-	body, err := g.request(http.MethodPost, "/api/v1/repos/migrate", bytes.NewBuffer(js), "application/json")
+	res, err := g.request(http.MethodPost, "/api/v1/repos/migrate", bytes.NewBuffer(js), "application/json")
+	if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+		// In case of timeout, wait for repo to finish importing
+		return g.RetrieveExistingRepo(gConfig, remote)
+	}
+
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
 
-	if body.Status != http.StatusCreated {
-		return nil, fmt.Errorf("invalid response: %d %s", body.Status, body.Body)
+	if res.Status == http.StatusRequestTimeout || res.Status == http.StatusGatewayTimeout {
+		// In case of timeout, wait for repo to finish importing
+		return g.RetrieveExistingRepo(gConfig, remote)
+	}
+
+	if res.Status != http.StatusCreated {
+		return nil, fmt.Errorf("invalid response: %d %s", res.Status, res.Body)
 	}
 
 	var result giteaProject
-	if err := json.Unmarshal(body.Body, &result); err != nil {
+	if err := json.Unmarshal(res.Body, &result); err != nil {
 		return nil, fmt.Errorf("parsing JSON response: %w", err)
 	}
 
@@ -186,8 +198,30 @@ func (g *Gitea) ImportRepository(gConfig configuration.ConfigGroup, remote sourc
 }
 
 func (g *Gitea) LockUntilImport(repo *Repository) error {
-	// Gitea locks during the import request
-	return nil
+	for {
+		_path := fmt.Sprintf("/api/v1/repos/%s/%s", repo.ConfigGroup.GiteaUsername, repo.Name)
+		body, err := g.request(http.MethodGet, _path, nil, "")
+		if err != nil {
+			return fmt.Errorf("creating request: %w", err)
+		}
+
+		if body.Status == http.StatusNotFound {
+			return fmt.Errorf("repository not found")
+		}
+
+		var project giteaProject
+		if err := json.Unmarshal(body.Body, &project); err != nil {
+			return err
+		}
+
+		switch project.Empty {
+		case false:
+			return nil
+		case true:
+			fmt.Println("- Current import status: waiting")
+			time.Sleep(5 * time.Second)
+		}
+	}
 }
 
 func (g *Gitea) SetOriginalUrl(repo *Repository, originUrl string) error {

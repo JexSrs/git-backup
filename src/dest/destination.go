@@ -18,6 +18,7 @@ type Repository struct {
 	Name              string
 	HttpUrl           string
 	PathWithNamespace string
+	FinishedMiration  bool
 
 	Remote      sources.SourceRepository
 	ConfigGroup configuration.ConfigGroup

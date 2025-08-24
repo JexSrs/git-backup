@@ -45,11 +45,11 @@ func mapSources(config configuration.Configuration) map[string]sources.Source {
 	ret := map[string]sources.Source{}
 	for _, source := range config.Sources {
 		if strings.HasPrefix(source.ID, "github") {
-			ret[source.ID] = sources.NewGithub(source.Token)
+			ret[source.ID] = sources.NewGithub(source)
 		} else if strings.HasPrefix(source.ID, "huggingface") {
-			ret[source.ID] = sources.NewHuggingFace(source.Token)
+			ret[source.ID] = sources.NewHuggingFace(source)
 		} else if strings.HasPrefix(source.ID, "gitlab") {
-			ret[source.ID] = sources.NewGitlab(source.BaseURL, source.Token)
+			ret[source.ID] = sources.NewGitlab(source)
 		}
 	}
 
@@ -60,11 +60,11 @@ func mapDestinations(config configuration.Configuration) map[string]dest.Destina
 	ret := map[string]dest.Destination{}
 	for _, dst := range config.Destinations {
 		if strings.HasPrefix(dst.ID, "gitlab") {
-			ret[dst.ID] = dest.NewGitLab(dst.ID, dst.URL, dst.Token)
+			ret[dst.ID] = dest.NewGitLab(dst)
 		} else if strings.HasPrefix(dst.ID, "dufs") {
-			ret[dst.ID] = dest.NewDufs(dst.ID, dst.URL)
+			ret[dst.ID] = dest.NewDufs(dst)
 		} else if strings.HasPrefix(dst.ID, "gitea") {
-			ret[dst.ID] = dest.NewGitea(dst.ID, dst.URL, dst.Token)
+			ret[dst.ID] = dest.NewGitea(dst)
 		}
 	}
 

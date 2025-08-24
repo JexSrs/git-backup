@@ -1,6 +1,6 @@
 # Git Backup
 
-A go script to retrieve the public repositories from various sources and sync them to a GitLab instance.
+A go script to retrieve the public repositories from various sources and sync them to a GitLab or Gitea instance.
 
 ## Features
 
@@ -66,13 +66,6 @@ This tool supports synchronization with the following sources:
 | Open issues check      | ✅      |        |             |
 | Creation date check    | ✅      |        |             |
 | Last update date check | ✅      |        |             |
-
-## Requirements
-
-1. The GitLab's URL instance (defaults to `https://gitlab.com/`)
-2. The GitLab user's token
-3. The source user's token
-4. The dufs url (for asset uploading, optional)
 
 ## Setup
 

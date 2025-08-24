@@ -3,6 +3,7 @@ package sources
 import (
 	"encoding/json"
 	"fmt"
+	"main/src/configuration"
 	"net/http"
 	"regexp"
 	"strings"
@@ -22,10 +23,12 @@ type HuggingFaceMetadata struct {
 	What string
 }
 
-func NewHuggingFace(token string) *HuggingFace {
+func NewHuggingFace(config configuration.ConfigSource) *HuggingFace {
 	return &HuggingFace{
-		Token:  token,
-		client: &http.Client{},
+		Token: config.Token,
+		client: &http.Client{
+			Timeout: config.Timeout,
+		},
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"main/src/configuration"
 	"main/src/utils"
 	"net/http"
 	"net/url"
@@ -61,10 +62,12 @@ type GithubAsset struct {
 	BrowserDownloadUrl string `json:"browser_download_url"`
 }
 
-func NewGithub(token string) *Github {
+func NewGithub(config configuration.ConfigSource) *Github {
 	return &Github{
-		Token:  token,
-		client: &http.Client{},
+		Token: config.Token,
+		client: &http.Client{
+			Timeout: config.Timeout,
+		},
 	}
 }
 

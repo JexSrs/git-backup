@@ -3,6 +3,7 @@ package sources
 import (
 	"encoding/json"
 	"fmt"
+	"main/src/configuration"
 	"main/src/utils"
 	"net/http"
 	"net/url"
@@ -62,13 +63,15 @@ type GitlabMetadata struct {
 	VisitedGroupIDs      map[int]bool
 }
 
-func NewGitlab(baseUrl, token string) *Gitlab {
-	u, _ := url.Parse(baseUrl)
+func NewGitlab(config configuration.ConfigSource) *Gitlab {
+	u, _ := url.Parse(config.BaseURL)
 
 	return &Gitlab{
-		URL:    *u,
-		Token:  token,
-		client: &http.Client{},
+		URL:   *u,
+		Token: config.Token,
+		client: &http.Client{
+			Timeout: config.Timeout,
+		},
 	}
 }
 
