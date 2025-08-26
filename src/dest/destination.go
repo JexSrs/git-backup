@@ -46,7 +46,7 @@ func (r *Repository) CloneFromSource(source sources.Source) error {
 
 func (r *Repository) GetLocalBranches() ([]string, error) {
 	if r.LocalRepository == nil {
-		return nil, fmt.Errorf("no repository found for gitlabProject %d", r.ID)
+		return nil, fmt.Errorf("no repository found for %s", r.ID)
 	}
 
 	branches, err := r.LocalRepository.Branches()
@@ -72,7 +72,7 @@ func (r *Repository) GetLocalBranches() ([]string, error) {
 
 func (r *Repository) PushLocalBranch(branch, remoteID string) error {
 	if r.LocalRepository == nil {
-		return fmt.Errorf("no repository found for gitlabProject %d", r.ID)
+		return fmt.Errorf("no repository found for %s", r.ID)
 	}
 
 	remoteBranch := branch
@@ -98,14 +98,13 @@ func (r *Repository) PushLocalBranch(branch, remoteID string) error {
 
 func (r *Repository) PushAllTags(remoteID string) error {
 	if r.LocalRepository == nil {
-		return fmt.Errorf("no repository found for gitlabProject %d", r.ID)
+		return fmt.Errorf("no repository found for %s", r.ID)
 	}
 
 	pushOptions := &git.PushOptions{
 		RemoteName: remoteID,
 		RefSpecs:   []config.RefSpec{"refs/tags/*:refs/tags/*"},
 		Force:      true,
-		//Progress:   os.Stdout,
 	}
 
 	// Perform the push
