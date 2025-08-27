@@ -11,9 +11,9 @@ import (
 )
 
 func SyncUser(dst map[string]dest.Destination, groupCfg configuration.ConfigGroup, source sources.Source) {
-	fmt.Println("\n================================================")
+	fmt.Println("\n================================================================")
 	fmt.Printf("Evaluating group %s from %s\n", groupCfg.Username, groupCfg.Source)
-	fmt.Println("================================================")
+	fmt.Println("================================================================")
 
 	count := 1
 
@@ -92,9 +92,13 @@ func SyncRepo(
 			fmt.Println("  - Migration has not finished")
 		}
 
-		fmt.Println("- Waiting for repository import to finish...")
-		if err := gitDst.LockUntilImport(repo); err != nil {
-			return errors.Wrap(err, "failed to read import status")
+		if !remote.IsEmpty {
+			fmt.Println("- Waiting for repository import to finish...")
+			if err := gitDst.LockUntilImport(repo, func(status string) {
+				fmt.Println("  - Current import status:", status)
+			}); err != nil {
+				return errors.Wrap(err, "failed to read import status")
+			}
 		}
 
 		fmt.Println("- Setting 'original_url' attribute:", remote.URL)

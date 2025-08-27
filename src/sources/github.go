@@ -110,6 +110,7 @@ func (g *Github) Paginate(username string, prev *PaginationResponse) (*Paginatio
 			URL:         repo.URL,
 			Private:     repo.Private,
 			Archived:    repo.Archived,
+			IsEmpty:     repo.Size == 0,
 		})
 	}
 
@@ -180,4 +181,8 @@ func (g *Github) AddTokenToCloneUrl(u string) string {
 	parsedURL, _ := url.Parse(u)
 	parsedURL.User = url.User(g.Token)
 	return parsedURL.String()
+}
+
+func (g *Github) FetchUsernamePassword() (string, string) {
+	return g.Token, ""
 }

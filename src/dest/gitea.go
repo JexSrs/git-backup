@@ -197,7 +197,7 @@ func (g *Gitea) ImportRepository(gConfig configuration.ConfigGroup, remote sourc
 	}, nil
 }
 
-func (g *Gitea) LockUntilImport(repo *Repository) error {
+func (g *Gitea) LockUntilImport(repo *Repository, ping func(string)) error {
 	for {
 		_path := fmt.Sprintf("/api/v1/repos/%s/%s", repo.ConfigGroup.GiteaUsername, repo.Name)
 		body, err := g.request(http.MethodGet, _path, nil, "")
@@ -218,7 +218,7 @@ func (g *Gitea) LockUntilImport(repo *Repository) error {
 		case false:
 			return nil
 		case true:
-			fmt.Println("- Current import status: waiting")
+			ping("waiting")
 			time.Sleep(5 * time.Second)
 		}
 	}

@@ -33,6 +33,7 @@ type GitlabRepository struct {
 	HttpUrl     string  `json:"http_url_to_repo"`
 	Visibility  string  `json:"visibility"`
 	Archived    bool    `json:"archived"`
+	IsEmpty     bool    `json:"empty_repo"`
 }
 
 type GitlabRelease struct {
@@ -222,6 +223,7 @@ func (g *Gitlab) fetchRepositories(parentGroup *GitlabGroup, pageNumber int) ([]
 			Avatar:      repo.Avatar,
 			Private:     repo.Visibility == "private",
 			Archived:    repo.Archived,
+			IsEmpty:     repo.IsEmpty,
 		}
 	}
 
@@ -263,7 +265,7 @@ func (g *Gitlab) fetchSubgroups(parentGroupID, pageNumber int) ([]GitlabGroup, e
 }
 
 func (g *Gitlab) fetchGroupId(username string) (int, error) {
-	urlPath := fmt.Sprintf("%s/api/v4/groups/%s", g.URL.String(), username)
+	urlPath := fmt.Sprintf("%s/api/v4/groups/%s", g.URL.String(), url.PathEscape(username))
 	req, err := http.NewRequest(http.MethodGet, urlPath, nil)
 	if err != nil {
 		return 0, err
@@ -392,4 +394,8 @@ func (g *Gitlab) AddTokenToCloneUrl(u string) string {
 	parsedURL, _ := url.Parse(u)
 	parsedURL.User = url.UserPassword("oauth2", g.Token)
 	return parsedURL.String()
+}
+
+func (g *Gitlab) FetchUsernamePassword() (string, string) {
+	return "oauth2", g.Token
 }

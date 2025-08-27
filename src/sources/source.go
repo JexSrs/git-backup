@@ -5,6 +5,7 @@ type Source interface {
 	GetWikiURL(username, repoName string) string
 	FetchReleases(username string, repo SourceRepository) ([]SourceRelease, error)
 	AddTokenToCloneUrl(url string) string
+	FetchUsernamePassword() (string, string)
 }
 
 type PaginationResponse struct {
@@ -23,6 +24,7 @@ type SourceRepository struct {
 	Avatar      *string
 	Private     bool
 	Archived    bool
+	IsEmpty     bool
 
 	ParentGroupPath []SourceRepositoryGroup
 

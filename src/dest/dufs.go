@@ -50,7 +50,7 @@ func (g *Dufs) ImportRepository(gConfig configuration.ConfigGroup, remote source
 	return nil, fmt.Errorf("not implemented")
 }
 
-func (g *Dufs) LockUntilImport(repo *Repository) error {
+func (g *Dufs) LockUntilImport(repo *Repository, ping func(string)) error {
 	return fmt.Errorf("not implemented")
 }
 

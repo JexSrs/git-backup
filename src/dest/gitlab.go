@@ -208,7 +208,7 @@ func (g *GitLab) ImportRepository(gConfig configuration.ConfigGroup, remote sour
 	}, nil
 }
 
-func (g *GitLab) LockUntilImport(repo *Repository) error {
+func (g *GitLab) LockUntilImport(repo *Repository, ping func(string)) error {
 	urlPath := fmt.Sprintf("/api/v4/projects/%s", repo.ID)
 
 	for {
@@ -229,7 +229,7 @@ func (g *GitLab) LockUntilImport(repo *Repository) error {
 		case "failed":
 			return fmt.Errorf("current import status: %s", importStatus)
 		default:
-			fmt.Printf("- Current import status: %s\n", importStatus)
+			ping(importStatus)
 			time.Sleep(5 * time.Second)
 		}
 	}

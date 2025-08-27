@@ -6,6 +6,7 @@ import (
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"main/src/configuration"
 	"main/src/sources"
 	"os"
@@ -32,8 +33,13 @@ func (r *Repository) CloneFromSource(source sources.Source) error {
 	path := filepath.Join("/tmp/git-backup/", r.Name)
 	os.RemoveAll(path)
 
+	username, password := source.FetchUsernamePassword()
 	gr, err := git.PlainClone(path, false, &git.CloneOptions{
-		URL: source.AddTokenToCloneUrl(r.Remote.URL),
+		URL: r.Remote.URL,
+		Auth: &http.BasicAuth{
+			Username: username,
+			Password: password,
+		},
 	})
 
 	if err != nil {
@@ -136,7 +142,7 @@ type Destination interface {
 
 	RetrieveExistingRepo(gConfig configuration.ConfigGroup, remote sources.SourceRepository) (*Repository, error)
 	ImportRepository(gConfig configuration.ConfigGroup, remote sources.SourceRepository, source sources.Source) (*Repository, error)
-	LockUntilImport(repo *Repository) error
+	LockUntilImport(repo *Repository, ping func(status string)) error
 	SetOriginalUrl(repo *Repository, url string) error
 
 	GetProtectedBranches(repo *Repository) ([]string, error)

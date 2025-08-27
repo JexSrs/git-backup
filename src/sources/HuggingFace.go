@@ -130,6 +130,10 @@ func (g *HuggingFace) AddTokenToCloneUrl(url string) string {
 	return url
 }
 
+func (g *HuggingFace) FetchUsernamePassword() (string, string) {
+	return "", g.Token
+}
+
 func extractLink(h string) string {
 	if len(h) == 0 {
 		return ""
