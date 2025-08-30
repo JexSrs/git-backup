@@ -46,7 +46,7 @@ func (g *Dufs) RetrieveExistingRepo(gConfig configuration.ConfigGroup, remote so
 	return nil, fmt.Errorf("not implemented")
 }
 
-func (g *Dufs) ImportRepository(gConfig configuration.ConfigGroup, remote sources.SourceRepository, source sources.Source) (*Repository, error) {
+func (g *Dufs) ImportRepository(gConfig configuration.ConfigGroup, config configuration.ConfigRepo, remote sources.SourceRepository, source sources.Source) (*Repository, error) {
 	return nil, fmt.Errorf("not implemented")
 }
 

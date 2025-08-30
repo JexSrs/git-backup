@@ -141,7 +141,7 @@ type Destination interface {
 	GetIdentification() DestinationID
 
 	RetrieveExistingRepo(gConfig configuration.ConfigGroup, remote sources.SourceRepository) (*Repository, error)
-	ImportRepository(gConfig configuration.ConfigGroup, remote sources.SourceRepository, source sources.Source) (*Repository, error)
+	ImportRepository(gConfig configuration.ConfigGroup, config configuration.ConfigRepo, remote sources.SourceRepository, source sources.Source) (*Repository, error)
 	LockUntilImport(repo *Repository, ping func(status string)) error
 	SetOriginalUrl(repo *Repository, url string) error
 

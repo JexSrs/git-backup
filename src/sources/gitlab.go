@@ -223,7 +223,7 @@ func (g *Gitlab) fetchRepositories(parentGroup *GitlabGroup, pageNumber int) ([]
 			Avatar:      repo.Avatar,
 			Private:     repo.Visibility == "private",
 			Archived:    repo.Archived,
-			IsEmpty:     repo.IsEmpty,
+			Empty:       repo.IsEmpty,
 		}
 	}
 

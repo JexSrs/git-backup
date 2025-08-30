@@ -162,7 +162,7 @@ func (g *GitLab) RetrieveExistingRepo(gConfig configuration.ConfigGroup, remote 
 	return nil, nil
 }
 
-func (g *GitLab) ImportRepository(gConfig configuration.ConfigGroup, remote sources.SourceRepository, source sources.Source) (*Repository, error) {
+func (g *GitLab) ImportRepository(gConfig configuration.ConfigGroup, config configuration.ConfigRepo, remote sources.SourceRepository, source sources.Source) (*Repository, error) {
 	if isReservedGitlabName(remote.Name) {
 		return nil, fmt.Errorf("repository name %s is reserved", remote.Name)
 	}

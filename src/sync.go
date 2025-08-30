@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/pkg/errors"
+	"log"
 	"main/src/configuration"
 	"main/src/dest"
 	"main/src/sources"
@@ -45,11 +46,15 @@ func SyncUser(dst map[string]dest.Destination, groupCfg configuration.ConfigGrou
 				continue
 			}
 
+			if skipFromFilter(remote, groupCfg.Filter) {
+				fmt.Printf("Skipping repository %s: from --filter\n", remote.Name)
+				continue
+			}
+
 			fmt.Printf("\n%d. Evaluating repository %s\n", count, remote.Name)
 			cfg := groupCfg.GetConfig(remote.Name)
 			if err := SyncRepo(dst, source, remote, cfg, groupCfg); err != nil {
-				fmt.Println(err)
-				panic(err)
+				log.Fatal(err)
 			}
 
 			count++
@@ -82,17 +87,17 @@ func SyncRepo(
 		if repo == nil {
 			fmt.Println("- Repository does not exist in destination")
 			fmt.Println("- Importing...")
-			repo, err = gitDst.ImportRepository(gConfig, remote, source)
+			repo, err = gitDst.ImportRepository(gConfig, config, remote, source)
 			if err != nil {
 				return errors.Wrap(err, "failed to import project")
 			}
 			fmt.Println("- Imported new repository with id:", repo.ID)
 		} else {
 			fmt.Println("- Repository already exists in destination with id", repo.ID)
-			fmt.Println("  - Migration has not finished")
 		}
 
-		if !remote.IsEmpty {
+		if !remote.Empty {
+			fmt.Println("  - Migration has not finished")
 			fmt.Println("- Waiting for repository import to finish...")
 			if err := gitDst.LockUntilImport(repo, func(status string) {
 				fmt.Println("  - Current import status:", status)
@@ -124,6 +129,11 @@ func SyncRepo(
 		}
 	} else {
 		fmt.Println("- Repository already exists in destination with id", repo.ID)
+		if *gConfig.Filter.OnlyNew {
+			fmt.Println("- Only new is enabled, skipping...")
+			return nil
+		}
+
 		fmt.Println("- Cloning repository from source...")
 		if err := repo.CloneFromSource(source); err != nil {
 			return errors.Wrap(err, "failed to clone source")
@@ -319,4 +329,36 @@ func SyncRepo(
 	}
 
 	return nil
+}
+
+func skipFromFilter(remote sources.SourceRepository, filter configuration.ConfigFilter) bool {
+	if filter.Visibility != nil {
+		if remote.Private && !utils.ContainsIgnoreCase(filter.Visibility, "private") {
+			return true
+		}
+
+		if !remote.Private && !utils.ContainsIgnoreCase(filter.Visibility, "public") {
+			return true
+		}
+	}
+
+	if filter.Archived != nil {
+		if *filter.Archived != remote.Archived {
+			return true
+		}
+	}
+
+	if filter.Empty != nil {
+		if *filter.Empty != remote.Empty {
+			return true
+		}
+	}
+
+	if filter.HasDescription != nil {
+		if *filter.HasDescription != (remote.Description != nil && len(*remote.Description) != 0) {
+			return true
+		}
+	}
+
+	return false
 }

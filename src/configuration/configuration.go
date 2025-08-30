@@ -59,6 +59,7 @@ type ConfigSource struct {
 type ConfigRepo struct {
 	FetchAvatar *bool              `json:"fetch_avatar"`
 	Destination *string            `json:"destination"`
+	LFS         *bool              `json:"lfs"`
 	Wiki        ConfigRepoWiki     `json:"wiki"`
 	Releases    ConfigRepoReleases `json:"releases"`
 }
@@ -81,8 +82,10 @@ type ConfigRepoAssets struct {
 // Filter configuration
 
 type ConfigFilter struct {
+	OnlyNew        *bool                      `json:"only_new"`
 	Visibility     []string                   `json:"visibility"`
 	Archived       *bool                      `json:"archived"`
+	Empty          *bool                      `json:"empty"`
 	HasDescription *bool                      `json:"has_description"`
 	License        []string                   `json:"license"`
 	Topics         []string                   `json:"topics"`
@@ -154,10 +157,12 @@ type ConfigRepository struct {
 func (c *Configuration) PopulateDefault() {
 	c.Filter.DefaultFrom(ConfigFilter{
 		Visibility: []string{"public", "private"},
+		OnlyNew:    utils.Pointer(false),
 	})
 
 	c.Config.DefaultFrom(ConfigRepo{
 		FetchAvatar: utils.Pointer(true),
+		LFS:         utils.Pointer(true),
 		Wiki: ConfigRepoWiki{
 			Exclude: utils.Pointer(false),
 		},
@@ -238,6 +243,10 @@ func (c *ConfigRepo) DefaultFrom(from ConfigRepo) {
 		c.FetchAvatar = from.FetchAvatar
 	}
 
+	if c.LFS == nil {
+		c.LFS = from.LFS
+	}
+
 	if c.Destination == nil {
 		c.Destination = from.Destination
 	}
@@ -264,12 +273,20 @@ func (c *ConfigRepo) DefaultFrom(from ConfigRepo) {
 }
 
 func (c *ConfigFilter) DefaultFrom(from ConfigFilter) {
+	if c.OnlyNew == nil {
+		c.OnlyNew = from.OnlyNew
+	}
+
 	if c.Visibility == nil {
 		c.Visibility = from.Visibility
 	}
 
 	if c.Archived == nil {
 		c.Archived = from.Archived
+	}
+
+	if c.Empty == nil {
+		c.Empty = from.Empty
 	}
 
 	if c.HasDescription == nil {

@@ -23,8 +23,8 @@ type SourceRepository struct {
 	Description *string
 	Avatar      *string
 	Private     bool
-	Archived    bool
-	IsEmpty     bool
+	Archived bool
+	Empty    bool
 
 	ParentGroupPath []SourceRepositoryGroup
 

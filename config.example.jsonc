@@ -1,10 +1,10 @@
 {
     // Global configuration that applies to all sourced groups and repositories unless specifically overridden locally.
     "config": {
-        // Determines whether to fetch the repository's avatar (true) or not (false); defaults to true
-        // Applicable only for gitlab sources
-        "fetch_avatar": true,
         "destination": "gitlab",
+        "lfs": true, // Fetch LFS (true) or not (false)
+        // Determines whether to fetch the repository's avatar (true) or not (false); defaults to true
+        "fetch_avatar": true, // Applicable only for gitlab sources
         "wiki": {
             // Determines whether wiki syncing is excluded (true) or included (false); defaults to false
             "exclude": false
@@ -23,8 +23,10 @@
     },
     // Global filters that apply to all sourced groups and repositories unless specifically overridden locally.
     "filter": {
-        "visibility": ["private", "public"], // Fetch both private and public repositories
+        "only_new": true, // Sync repositories that do not belong in destination,
+        "visibility": ["private", "public"], // Fetch both private and public repositories,
         "archived": null, // Fetch only archived (true) or only unarchived (false)
+        "empty": null, // Fetch only empty (true) or non empty (false) repositories
         "has_description": null, // Fetch repositories that have their description populated (true) or empty (false)
         "license": null, // Filter based on specific licenses ["MIT"], empty string inside the array means it does not have a license
         "topics": null, // Filter based on specific topics ["machine-learning", "typescript"]

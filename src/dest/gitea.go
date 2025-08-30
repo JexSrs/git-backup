@@ -141,12 +141,12 @@ func (g *Gitea) RetrieveExistingRepo(gConfig configuration.ConfigGroup, remote s
 	}, nil
 }
 
-func (g *Gitea) ImportRepository(gConfig configuration.ConfigGroup, remote sources.SourceRepository, source sources.Source) (*Repository, error) {
+func (g *Gitea) ImportRepository(gConfig configuration.ConfigGroup, config configuration.ConfigRepo, remote sources.SourceRepository, source sources.Source) (*Repository, error) {
 	data := map[string]any{
 		"clone_addr":    source.AddTokenToCloneUrl(remote.URL),
 		"issues":        false,
 		"labels":        false,
-		"lfs":           true,
+		"lfs":           *config.LFS,
 		"milestones":    false,
 		"mirror":        false,
 		"private":       false,
@@ -234,6 +234,10 @@ func (g *Gitea) SetOriginalUrl(repo *Repository, originUrl string) error {
 	res, err := g.request(http.MethodPost, _path, bytes.NewBuffer(data), "application/json")
 	if err != nil {
 		return fmt.Errorf("creating request: %w", err)
+	}
+
+	if res.Status == http.StatusConflict {
+		return nil // Url already set
 	}
 
 	if res.Status != http.StatusNoContent {

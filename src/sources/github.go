@@ -76,7 +76,7 @@ func (g *Github) Paginate(username string, prev *PaginationResponse) (*Paginatio
 		prev = &PaginationResponse{NextPage: 1}
 	}
 
-	urlPath := fmt.Sprintf("https://api.github.com/search/repositories?q=user:%s&per_page=100&page=%d", username, prev.NextPage)
+	urlPath := fmt.Sprintf("https://api.github.com/search/repositories?q=user:%s+fork:true&per_page=100&page=%d", username, prev.NextPage)
 
 	req, err := http.NewRequest(http.MethodGet, urlPath, nil)
 	if err != nil {
@@ -110,7 +110,7 @@ func (g *Github) Paginate(username string, prev *PaginationResponse) (*Paginatio
 			URL:         repo.URL,
 			Private:     repo.Private,
 			Archived:    repo.Archived,
-			IsEmpty:     repo.Size == 0,
+			Empty:       repo.Size == 0,
 		})
 	}
 
