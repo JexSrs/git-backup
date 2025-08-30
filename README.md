@@ -76,3 +76,26 @@ Use the `docker compose` command to create and start the container.
 ```shell
 docker compose up --build -d
 ```
+
+## Contribution
+
+Contributions are welcome! Please feel free to submit a pull request or file an issue for improvements, features, or bug
+fixes.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## TODO
+- Allow gitlab to scrape without a token (public requests)
+- Add go-gitea as a source
+- Enhance filters
+    - releases (min, max)
+    - all issues (min, max)
+    - closed issues (min, max)
+    - all pull_requests (min, max)
+    - open pull_requests (min, max)
+    - closed pull_requests (min, max)
+    - commits (min, max)
+- Update avatar's on groups (GitLab)
+- Change subgroup if changed from source (GitLab)
