@@ -15,14 +15,14 @@ func DownloadAsset(srcUrl string) (*bytes.Buffer, error) {
 	defer response.Body.Close()
 
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return nil, fmt.Errorf("Failed to download asset. HTTP status code: %d\n", response.StatusCode)
+		return nil, fmt.Errorf("failed to download asset. HTTP status code: %d", response.StatusCode)
 	}
 
-	var buffer bytes.Buffer
-	_, err = io.Copy(&buffer, response.Body)
+	buffer := &bytes.Buffer{}
+	_, err = io.Copy(buffer, response.Body)
 	if err != nil {
 		return nil, err
 	}
 
-	return &buffer, nil
+	return buffer, nil
 }

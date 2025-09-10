@@ -185,6 +185,15 @@ func SyncRepo(
 				return errors.Wrap(err, "failed to download avatar")
 			}
 
+			if ext == "ico" {
+				avatarBuffer, err = utils.ConvertICOtoPNG(avatarBuffer)
+				if err != nil {
+					return errors.Wrap(err, "failed to convert avatar: ico to png")
+				}
+
+				ext = "png"
+			}
+
 			fmt.Println("  - Uploading avatar...")
 			if err := gitDst.ChangeAvatar(repo, avatarBuffer, ext); err != nil {
 				return errors.Wrap(err, "failed to upload avatar")
@@ -356,6 +365,12 @@ func skipFromFilter(remote sources.SourceRepository, filter configuration.Config
 
 	if filter.HasDescription != nil {
 		if *filter.HasDescription != (remote.Description != nil && len(*remote.Description) != 0) {
+			return true
+		}
+	}
+
+	if filter.Forked != nil {
+		if *filter.Forked != remote.Forked {
 			return true
 		}
 	}

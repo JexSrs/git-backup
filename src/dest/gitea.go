@@ -115,7 +115,7 @@ func (g *Gitea) GetIdentification() DestinationID {
 }
 
 func (g *Gitea) RetrieveExistingRepo(gConfig configuration.ConfigGroup, remote sources.SourceRepository) (*Repository, error) {
-	_path := fmt.Sprintf("/api/v1/repos/%s/%s", gConfig.GiteaUsername, remote.Name)
+	_path := fmt.Sprintf("/api/v1/repos/%s/%s", gConfig.GiteaUsername, strings.ReplaceAll(remote.Name, " ", "-"))
 	body, err := g.request(http.MethodGet, _path, nil, "")
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
@@ -142,6 +142,7 @@ func (g *Gitea) RetrieveExistingRepo(gConfig configuration.ConfigGroup, remote s
 }
 
 func (g *Gitea) ImportRepository(gConfig configuration.ConfigGroup, config configuration.ConfigRepo, remote sources.SourceRepository, source sources.Source) (*Repository, error) {
+	repoName := strings.ReplaceAll(remote.Name, " ", "-")
 	data := map[string]any{
 		"clone_addr":    source.AddTokenToCloneUrl(remote.URL),
 		"issues":        false,
@@ -152,7 +153,7 @@ func (g *Gitea) ImportRepository(gConfig configuration.ConfigGroup, config confi
 		"private":       false,
 		"pull_requests": false,
 		"releases":      false,
-		"repo_name":     remote.Name,
+		"repo_name":     repoName,
 		"repo_owner":    gConfig.GiteaUsername,
 		"service":       "git",
 		"wiki":          false,
@@ -179,6 +180,11 @@ func (g *Gitea) ImportRepository(gConfig configuration.ConfigGroup, config confi
 	}
 
 	if res.Status != http.StatusCreated {
+		if res.Status == http.StatusInternalServerError || res.Status == http.StatusUnprocessableEntity {
+			// Delete repository if failed
+			g.request(http.MethodDelete, fmt.Sprintf("/api/v1/repos/%s/%s", gConfig.GiteaUsername, repoName), nil, "")
+		}
+
 		return nil, fmt.Errorf("invalid response: %d %s", res.Status, res.Body)
 	}
 
@@ -332,7 +338,7 @@ func (g *Gitea) ChangeArchivedState(repo *Repository, isArchived bool) error {
 
 func (g *Gitea) ChangeAvatar(repo *Repository, avatar *bytes.Buffer, ext string) error {
 	data, _ := json.Marshal(map[string]any{
-		"image": "data:image/" + ext + ";base64," + base64.StdEncoding.EncodeToString(avatar.Bytes()),
+		"image": base64.StdEncoding.EncodeToString(avatar.Bytes()),
 	})
 
 	_path := fmt.Sprintf("/api/v1/repos/%s/%s/avatar", repo.ConfigGroup.GiteaUsername, repo.Name)

@@ -22,13 +22,15 @@ type SourceRepository struct {
 	URL         string
 	Description *string
 	Avatar      *string
-	Private     bool
+
+	Private  bool
 	Archived bool
 	Empty    bool
+	Forked   bool
 
 	ParentGroupPath []SourceRepositoryGroup
 
-	// Used by GitLab
+	// Used by GitLab source
 	ID int
 }
 

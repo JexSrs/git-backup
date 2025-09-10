@@ -33,13 +33,18 @@ func (r *Repository) CloneFromSource(source sources.Source) error {
 	path := filepath.Join("/tmp/git-backup/", r.Name)
 	os.RemoveAll(path)
 
-	username, password := source.FetchUsernamePassword()
 	gr, err := git.PlainClone(path, false, &git.CloneOptions{
 		URL: r.Remote.URL,
-		Auth: &http.BasicAuth{
-			Username: username,
-			Password: password,
-		},
+		Auth: func() *http.BasicAuth {
+			username, password := source.FetchUsernamePassword()
+			if len(username) == 0 && len(password) == 0 {
+				return nil
+			}
+			return &http.BasicAuth{
+				Username: username,
+				Password: password,
+			}
+		}(),
 	})
 
 	if err != nil {

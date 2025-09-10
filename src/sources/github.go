@@ -110,6 +110,7 @@ func (g *Github) Paginate(username string, prev *PaginationResponse) (*Paginatio
 			URL:         repo.URL,
 			Private:     repo.Private,
 			Archived:    repo.Archived,
+			Forked:      repo.IsFork,
 			Empty:       repo.Size == 0,
 		})
 	}

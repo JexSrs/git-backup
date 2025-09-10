@@ -391,11 +391,19 @@ func (g *Gitlab) FetchReleases(username string, repo SourceRepository) ([]Source
 }
 
 func (g *Gitlab) AddTokenToCloneUrl(u string) string {
+	if g.Token == "" {
+		return u
+	}
+
 	parsedURL, _ := url.Parse(u)
 	parsedURL.User = url.UserPassword("oauth2", g.Token)
 	return parsedURL.String()
 }
 
 func (g *Gitlab) FetchUsernamePassword() (string, string) {
+	if g.Token == "" {
+		return "", ""
+	}
+
 	return "oauth2", g.Token
 }

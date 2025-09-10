@@ -1,12 +1,16 @@
 package utils
 
 import (
+	"bytes"
 	"fmt"
+	"image/png"
 	"net/url"
 	"os"
 	"path"
 	"strconv"
 	"strings"
+
+	ico "github.com/biessek/golang-ico"
 )
 
 func OpenConfigFile() ([]byte, error) {
@@ -74,4 +78,19 @@ func ExtractExtension(fpath string) string {
 	filePath := parsedURL.Path
 	ext := path.Ext(filePath)
 	return strings.TrimPrefix(ext, ".")
+}
+
+func ConvertICOtoPNG(icoBuffer *bytes.Buffer) (*bytes.Buffer, error) {
+	img, err := ico.Decode(icoBuffer)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode ICO: %v", err)
+	}
+
+	pngBuffer := &bytes.Buffer{}
+	err = png.Encode(pngBuffer, img)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode PNG: %v", err)
+	}
+
+	return pngBuffer, nil
 }
