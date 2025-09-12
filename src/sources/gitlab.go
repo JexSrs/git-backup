@@ -69,14 +69,14 @@ func NewGitlab(config configuration.ConfigSource) *Gitlab {
 
 	return &Gitlab{
 		URL:   *u,
-		Token: config.Token,
+		Token: config.Auth.Token,
 		client: &http.Client{
 			Timeout: config.Timeout,
 		},
 	}
 }
 
-func (g *Gitlab) Paginate(username string, prev *PaginationResponse) (*PaginationResponse, error) {
+func (g *Gitlab) Paginate(username string, groupCfg configuration.ConfigGroup, prev *PaginationResponse) (*PaginationResponse, error) {
 	if prev == nil {
 		groupId, err := g.fetchGroupId(username)
 		if err != nil {
@@ -140,7 +140,7 @@ func (g *Gitlab) Paginate(username string, prev *PaginationResponse) (*Paginatio
 		// Append subgroup id to the path
 		metadata.CurrentGroup = &subgroup
 		metadata.ReposNextPage = 1
-		return g.Paginate(username, prev)
+		return g.Paginate(username, groupCfg, prev)
 	}
 
 	return &PaginationResponse{

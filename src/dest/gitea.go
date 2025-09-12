@@ -423,6 +423,11 @@ func (g *Gitea) LinkAsset(repo *Repository, release sources.SourceRelease, asset
 }
 
 func (g *Gitea) GetWikiProject(repo *Repository, gConfig configuration.ConfigGroup, source sources.Source) *Repository {
+	wikiUrl := source.GetWikiURL(gConfig.GiteaUsername, repo.Remote.Name)
+	if len(wikiUrl) == 0 {
+		return nil
+	}
+
 	return &Repository{
 		ID:                "",
 		Name:              fmt.Sprintf("%s.wiki", repo.Name),
@@ -431,7 +436,7 @@ func (g *Gitea) GetWikiProject(repo *Repository, gConfig configuration.ConfigGro
 		Remote: sources.SourceRepository{
 			ID:              0,
 			Name:            fmt.Sprintf("%s.wiki", repo.Remote.Name),
-			URL:             source.GetWikiURL(gConfig.GiteaUsername, repo.Remote.Name),
+			URL:             wikiUrl,
 			Description:     nil,
 			Avatar:          nil,
 			Private:         false,

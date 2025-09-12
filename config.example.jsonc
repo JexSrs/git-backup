@@ -108,7 +108,9 @@
     "sources": [
         {
             "id": "github",
-            "token": "", // Personal access token for GitHub user authentication.
+            "auth": {
+                "token": "" // Personal access token for GitHub user authentication.
+            },
             // Overrides global configuration for GitHub-sourced repositories, if specified.
             "config": {/*...*/},
             // Overrides global filters for GitHub-sourced repositories, if specified.
@@ -117,7 +119,9 @@
         {
             "id": "huggingface",
             "timeout": 660, // Timeout for all HTTP requests in seconds, Defaults to 10 minutes
-            "token": "", // Personal access token for HuggingFace user authentication.
+            "auth": {
+                "token": "" // Personal access token for HuggingFace user authentication.
+            },
             // Overrides global configuration for HuggingFace-sourced repositories, if specified.
             "config": {/*...*/},
             // Overrides global filters for HuggingFace-sourced repositories, if specified.
@@ -125,7 +129,9 @@
         },
         {
             "id": "gitlab",
-            "token": "", // Personal access token for GitLab user authentication.
+            "auth": {
+                "token": "" // Personal access token for GitLab user authentication.
+            },
             // Overrides global configuration for GitLab-sourced repositories, if specified.
             "config": {/*...*/},
             // Overrides global filters for GitLab-sourced repositories, if specified.
@@ -134,9 +140,22 @@
         {
             "id": "gitlab-custom-1", // Prefix "gitlab" + anything else (must be unique)
             "base_url": "https://gitlab.example.com", // The base url of the gitlab instance
-            "token": "", // Personal access token for GitLab user authentication.
+            "auth": {
+                "token": "" // Personal access token for GitLab user authentication.
+            },
             "config": {/*...*/},
             "filter": {/*...*/}
+        },
+        {
+            "id": "git-proxmox",
+            "auth": {
+                // For custom authorization
+                "username": "", // optional
+                "token": "" // optional
+            },
+            "filter": {
+                "only_new": false
+            }
         }
     ],
     // Configuration for specific groups of repositories
@@ -187,6 +206,16 @@
             "destination": "gitea",
             "username": "ilsp",
             "gitea_username": "ilsp-mirror" // Defaults to username
+        },
+        {
+            "source": "git-proxmox",
+            "username": "proxmox",
+            "repositories": [
+                {
+                    "name": "lxc",
+                    "url": "https://git.proxmox.com/git/lxc.git"
+                }
+            ]
         }
         // Additional groups can be specified here...
     ]

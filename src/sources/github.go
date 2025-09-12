@@ -64,14 +64,14 @@ type GithubAsset struct {
 
 func NewGithub(config configuration.ConfigSource) *Github {
 	return &Github{
-		Token: config.Token,
+		Token: config.Auth.Token,
 		client: &http.Client{
 			Timeout: config.Timeout,
 		},
 	}
 }
 
-func (g *Github) Paginate(username string, prev *PaginationResponse) (*PaginationResponse, error) {
+func (g *Github) Paginate(username string, groupCfg configuration.ConfigGroup, prev *PaginationResponse) (*PaginationResponse, error) {
 	if prev == nil {
 		prev = &PaginationResponse{NextPage: 1}
 	}

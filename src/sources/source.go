@@ -1,7 +1,9 @@
 package sources
 
+import "main/src/configuration"
+
 type Source interface {
-	Paginate(username string, prev *PaginationResponse) (*PaginationResponse, error)
+	Paginate(username string, groupCfg configuration.ConfigGroup, prev *PaginationResponse) (*PaginationResponse, error)
 	GetWikiURL(username, repoName string) string
 	FetchReleases(username string, repo SourceRepository) ([]SourceRelease, error)
 	AddTokenToCloneUrl(url string) string

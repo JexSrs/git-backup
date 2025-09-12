@@ -371,6 +371,11 @@ func (g *GitLab) LinkAsset(repo *Repository, release sources.SourceRelease, asse
 }
 
 func (g *GitLab) GetWikiProject(repo *Repository, gConfig configuration.ConfigGroup, source sources.Source) *Repository {
+	wikiUrl := source.GetWikiURL(gConfig.Username, repo.Remote.Name)
+	if len(wikiUrl) == 0 {
+		return nil
+	}
+
 	return &Repository{
 		ID:                "",
 		Name:              fmt.Sprintf("%s.wiki", repo.Name),
@@ -379,7 +384,7 @@ func (g *GitLab) GetWikiProject(repo *Repository, gConfig configuration.ConfigGr
 		Remote: sources.SourceRepository{
 			ID:              0,
 			Name:            fmt.Sprintf("%s.wiki", repo.Remote.Name),
-			URL:             source.GetWikiURL(gConfig.Username, repo.Remote.Name),
+			URL:             wikiUrl,
 			Description:     nil,
 			Avatar:          nil,
 			Private:         false,

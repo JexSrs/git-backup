@@ -25,3 +25,26 @@ func ContainsIgnoreCase(slice []string, value string) bool {
 	}
 	return false
 }
+
+func ExtractNameFromGitURL(url string) string {
+	// Remove trailing slash if present
+	url = strings.TrimSuffix(url, "/")
+
+	// Find the last slash
+	lastSlash := strings.LastIndex(url, "/")
+	if lastSlash == -1 {
+		return url // No slash found, return the whole string
+	}
+
+	// Extract everything after the last slash
+	name := url[lastSlash+1:]
+
+	// Remove .git suffix if present
+	name = strings.TrimSuffix(name, ".git")
+
+	return name
+}
+
+func CheckPrefix(id string, prefix string) bool {
+	return strings.HasPrefix(id, prefix+"-") || id == prefix
+}

@@ -7,7 +7,6 @@ import (
 	"main/src/dest"
 	"main/src/sources"
 	"main/src/utils"
-	"strings"
 )
 
 func main() {
@@ -44,12 +43,14 @@ func main() {
 func mapSources(config configuration.Configuration) map[string]sources.Source {
 	ret := map[string]sources.Source{}
 	for _, source := range config.Sources {
-		if strings.HasPrefix(source.ID, "github") {
+		if utils.CheckPrefix(source.ID, "github") {
 			ret[source.ID] = sources.NewGithub(source)
-		} else if strings.HasPrefix(source.ID, "huggingface") {
+		} else if utils.CheckPrefix(source.ID, "huggingface") {
 			ret[source.ID] = sources.NewHuggingFace(source)
-		} else if strings.HasPrefix(source.ID, "gitlab") {
+		} else if utils.CheckPrefix(source.ID, "gitlab") {
 			ret[source.ID] = sources.NewGitlab(source)
+		} else if utils.CheckPrefix(source.ID, "git") {
+			ret[source.ID] = sources.NewGit(source)
 		}
 	}
 
@@ -59,11 +60,11 @@ func mapSources(config configuration.Configuration) map[string]sources.Source {
 func mapDestinations(config configuration.Configuration) map[string]dest.Destination {
 	ret := map[string]dest.Destination{}
 	for _, dst := range config.Destinations {
-		if strings.HasPrefix(dst.ID, "gitlab") {
+		if utils.CheckPrefix(dst.ID, "gitlab") {
 			ret[dst.ID] = dest.NewGitLab(dst)
-		} else if strings.HasPrefix(dst.ID, "dufs") {
+		} else if utils.CheckPrefix(dst.ID, "dufs") {
 			ret[dst.ID] = dest.NewDufs(dst)
-		} else if strings.HasPrefix(dst.ID, "gitea") {
+		} else if utils.CheckPrefix(dst.ID, "gitea") {
 			ret[dst.ID] = dest.NewGitea(dst)
 		}
 	}

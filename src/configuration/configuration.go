@@ -45,13 +45,18 @@ type ConfigDestination struct {
 
 // Sources configuration
 
+type ConfigSourceAuth struct {
+	Username string `json:"username"`
+	Token    string `json:"token"`
+}
+
 type ConfigSource struct {
-	ID      string        `json:"id"`
-	BaseURL string        `json:"base_url"`
-	Token   string        `json:"token"`
-	Timeout time.Duration `json:"timeout"`
-	Config  ConfigRepo    `json:"config"`
-	Filter  ConfigFilter  `json:"filter"`
+	ID      string           `json:"id"`
+	BaseURL string           `json:"base_url"`
+	Auth    ConfigSourceAuth `json:"auth"`
+	Timeout time.Duration    `json:"timeout"`
+	Config  ConfigRepo       `json:"config"`
+	Filter  ConfigFilter     `json:"filter"`
 }
 
 // Repository configuration
@@ -152,6 +157,7 @@ type ConfigRepository struct {
 	Filter ConfigFilter `json:"filter"`
 
 	Name string `json:"name"`
+	URL  string `json:"url"` // user only for git source
 }
 
 func (c *Configuration) PopulateDefault() {
@@ -431,7 +437,7 @@ func (c *Configuration) Validate() error {
 		}
 
 		for j, repo := range group.Repositories {
-			if len(repo.Name) == 0 {
+			if len(repo.Name) == 0 && !utils.CheckPrefix(source.ID, "git") {
 				return fmt.Errorf("name is required at index %d.%d", i, j)
 			}
 

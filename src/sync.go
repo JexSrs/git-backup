@@ -18,7 +18,7 @@ func SyncUser(dst map[string]dest.Destination, groupCfg configuration.ConfigGrou
 
 	count := 1
 
-	result, err := source.Paginate(groupCfg.Username, nil)
+	result, err := source.Paginate(groupCfg.Username, groupCfg, nil)
 	for {
 		if err != nil {
 			fmt.Println(err)
@@ -60,7 +60,7 @@ func SyncUser(dst map[string]dest.Destination, groupCfg configuration.ConfigGrou
 			count++
 		}
 
-		result, err = source.Paginate(groupCfg.Username, result)
+		result, err = source.Paginate(groupCfg.Username, groupCfg, result)
 	}
 }
 
