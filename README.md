@@ -87,8 +87,9 @@ fixes.
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## TODO
-- Allow gitlab to scrape without a token (public requests)
-- Add go-gitea as a source
+- Add go-gitea and lavaforge as a source
+- Add retry logic and delay between retries
+- Check latest commit's hash for existing entries to skip in case of no updates
 - Enhance filters
     - releases (min, max)
     - all issues (min, max)
