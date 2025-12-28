@@ -2,6 +2,7 @@ package dest
 
 import (
 	"bytes"
+	"crypto/tls"
 	"fmt"
 	"io"
 	"main/src/configuration"
@@ -16,6 +17,7 @@ type Dufs struct {
 	RootPath string
 
 	client *http.Client
+	config *configuration.ConfigDestination
 }
 
 func NewDufs(config configuration.ConfigDestination) *Dufs {
@@ -27,7 +29,11 @@ func NewDufs(config configuration.ConfigDestination) *Dufs {
 		RootPath: "/",
 		client: &http.Client{
 			Timeout: config.Timeout,
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: config.IgnoreTLS},
+			},
 		},
+		config: &config,
 	}
 }
 
@@ -39,6 +45,7 @@ func (g *Dufs) GetIdentification() DestinationID {
 			Wiki:     true,
 			Releases: true,
 		},
+		Config: g.config,
 	}
 }
 

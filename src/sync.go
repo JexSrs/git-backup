@@ -2,13 +2,14 @@ package main
 
 import (
 	"fmt"
-	"github.com/pkg/errors"
 	"log"
 	"main/src/configuration"
 	"main/src/dest"
 	"main/src/sources"
 	"main/src/utils"
 	"strings"
+
+	"github.com/pkg/errors"
 )
 
 func SyncUser(dst map[string]dest.Destination, groupCfg configuration.ConfigGroup, source sources.Source) {
@@ -135,7 +136,7 @@ func SyncRepo(
 		}
 
 		fmt.Println("- Cloning repository from source...")
-		if err := repo.CloneFromSource(source); err != nil {
+		if err := repo.CloneFromSource(source, *dstID.Config); err != nil {
 			return errors.Wrap(err, "failed to clone source")
 		}
 
@@ -205,7 +206,7 @@ func SyncRepo(
 		fmt.Println("- Checking for source Wiki...")
 		wikiRepo := gitDst.GetWikiProject(repo, gConfig, source)
 		if wikiRepo != nil {
-			if err := wikiRepo.CloneFromSource(source); err == nil {
+			if err := wikiRepo.CloneFromSource(source, *dstID.Config); err == nil {
 				defer func() {
 					if err := wikiRepo.Prune(); err != nil {
 						fmt.Println(errors.Wrap(err, "wiki: failed to prune project"))

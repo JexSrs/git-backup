@@ -2,10 +2,10 @@ package dest
 
 import (
 	"bytes"
+	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"github.com/go-git/go-git/v5/config"
 	"io"
 	"main/src/configuration"
 	"main/src/sources"
@@ -15,6 +15,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/go-git/go-git/v5/config"
 )
 
 type Gitea struct {
@@ -23,6 +25,7 @@ type Gitea struct {
 	APIToken string
 
 	client *http.Client
+	config *configuration.ConfigDestination
 }
 
 func NewGitea(config configuration.ConfigDestination) *Gitea {
@@ -34,7 +37,11 @@ func NewGitea(config configuration.ConfigDestination) *Gitea {
 		APIToken: config.Token,
 		client: &http.Client{
 			Timeout: config.Timeout,
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: config.IgnoreTLS},
+			},
 		},
+		config: &config,
 	}
 }
 
@@ -111,6 +118,7 @@ func (g *Gitea) GetIdentification() DestinationID {
 			Wiki:     true,
 			Releases: true,
 		},
+		Config: g.config,
 	}
 }
 
@@ -246,7 +254,7 @@ func (g *Gitea) SetOriginalUrl(repo *Repository, originUrl string) error {
 		return nil // Url already set
 	}
 
-	if res.Status != http.StatusNoContent {
+	if res.Status != http.StatusNoContent && res.Status != http.StatusCreated {
 		return fmt.Errorf("invalid response: %d %s", res.Status, res.Body)
 	}
 

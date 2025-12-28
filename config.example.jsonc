@@ -95,13 +95,15 @@
         // Configuration settings for the destination DUFS server where assets will be saved.
         {
             "id": "dufs",
-            "url": "https://dufs.home.local" // URL of the DUFS instance
+            "url": "https://dufs.home.lan" // URL of the DUFS instance
         },
         {
             "id": "gitea",
-            "url": "https://gitea.home.local", // URL of the Gitea instance;
+            "url": "https://gitea.home.lan", // URL of the Gitea instance;
             "token": "", // Personal access token for Gitea user authentication.
-            "timeout": 7200 // Timeout for all HTTP requests in seconds, Defaults to 10 minutes
+            "timeout": 7200, // Timeout for all HTTP requests in seconds, Defaults to 10 minutes
+            "git_timeout": 7200, // Timeout for all Git requests in seconds, Defaults to 1 hour
+            "ignore_tls": true // To ignore TLS certificate errors
         }
     ],
     // Defines the source platforms from which repositories will be synced.

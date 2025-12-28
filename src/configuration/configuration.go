@@ -37,10 +37,12 @@ func (c *Configuration) GetDestination(id string) *ConfigDestination {
 // Destinations configuration
 
 type ConfigDestination struct {
-	ID      string        `json:"id"`
-	URL     string        `json:"url"`
-	Token   string        `json:"token"`
-	Timeout time.Duration `json:"timeout"`
+	ID         string        `json:"id"`
+	URL        string        `json:"url"`
+	Token      string        `json:"token"`
+	Timeout    time.Duration `json:"timeout"`
+	GitTimeout time.Duration `json:"git_timeout"`
+	IgnoreTLS  bool          `json:"ignore_tls"`
 }
 
 // Sources configuration
@@ -213,6 +215,12 @@ func (c *Configuration) PopulateDefault() {
 			c.Destinations[i].Timeout = time.Minute * 10
 		} else {
 			c.Destinations[i].Timeout = time.Second * c.Destinations[i].Timeout // User is passing seconds
+		}
+
+		if c.Destinations[i].GitTimeout == 0 {
+			c.Destinations[i].GitTimeout = time.Hour * 1
+		} else {
+			c.Destinations[i].GitTimeout = time.Second * c.Destinations[i].GitTimeout // User is passing seconds
 		}
 
 		c.Sources[i].Config.DefaultFrom(c.Config)

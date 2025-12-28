@@ -2,16 +2,20 @@ package dest
 
 import (
 	"bytes"
+	"crypto/tls"
 	"fmt"
-	"github.com/go-git/go-git/v5"
-	"github.com/go-git/go-git/v5/config"
-	"github.com/go-git/go-git/v5/plumbing"
-	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"main/src/configuration"
 	"main/src/sources"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/config"
+	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/transport/client"
+	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 )
 
 type Repository struct {
@@ -29,18 +33,27 @@ type Repository struct {
 	OverrideRemoteBranch string
 }
 
-func (r *Repository) CloneFromSource(source sources.Source) error {
+func (r *Repository) CloneFromSource(source sources.Source, dstCfg configuration.ConfigDestination) error {
 	path := filepath.Join("/tmp/git-backup/", r.Name)
 	os.RemoveAll(path)
 
+	customClient := &http.Client{
+		Timeout: dstCfg.Timeout,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: dstCfg.IgnoreTLS},
+		},
+	}
+
+	client.InstallProtocol("https", githttp.NewClient(customClient))
+
 	gr, err := git.PlainClone(path, false, &git.CloneOptions{
 		URL: r.Remote.URL,
-		Auth: func() *http.BasicAuth {
+		Auth: func() *githttp.BasicAuth {
 			username, password := source.FetchUsernamePassword()
 			if len(username) == 0 && len(password) == 0 {
 				return nil
 			}
-			return &http.BasicAuth{
+			return &githttp.BasicAuth{
 				Username: username,
 				Password: password,
 			}
@@ -140,6 +153,7 @@ type DestinationIDRepository struct {
 type DestinationID struct {
 	ID         string
 	Repository DestinationIDRepository
+	Config     *configuration.ConfigDestination
 }
 
 type Destination interface {

@@ -2,9 +2,9 @@ package dest
 
 import (
 	"bytes"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"github.com/go-git/go-git/v5/config"
 	"io"
 	"main/src/configuration"
 	"main/src/sources"
@@ -16,6 +16,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/go-git/go-git/v5/config"
 )
 
 type GitLab struct {
@@ -24,6 +26,7 @@ type GitLab struct {
 	APIToken string
 
 	client *http.Client
+	config *configuration.ConfigDestination
 }
 
 func NewGitLab(config configuration.ConfigDestination) *GitLab {
@@ -35,7 +38,11 @@ func NewGitLab(config configuration.ConfigDestination) *GitLab {
 		APIToken: config.Token,
 		client: &http.Client{
 			Timeout: config.Timeout,
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: config.IgnoreTLS},
+			},
 		},
+		config: &config,
 	}
 }
 
@@ -116,6 +123,7 @@ func (g *GitLab) GetIdentification() DestinationID {
 			Wiki:     true,
 			Releases: true,
 		},
+		Config: g.config,
 	}
 }
 
