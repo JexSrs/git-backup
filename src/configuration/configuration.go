@@ -1,9 +1,12 @@
 package configuration
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"main/src/utils"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 )
@@ -43,6 +46,33 @@ type ConfigDestination struct {
 	Timeout    time.Duration `json:"timeout"`
 	GitTimeout time.Duration `json:"git_timeout"`
 	IgnoreTLS  bool          `json:"ignore_tls"`
+	CACert     string        `json:"ca_cert"` // path to a PEM CA bundle used to verify the destination's TLS cert
+}
+
+func (c ConfigDestination) LoadCABundle() ([]byte, error) {
+	if c.CACert == "" {
+		return nil, nil
+	}
+	return os.ReadFile(c.CACert)
+}
+
+func (c ConfigDestination) TLSConfig() *tls.Config {
+	cfg := &tls.Config{InsecureSkipVerify: c.IgnoreTLS}
+
+	caBundle, err := c.LoadCABundle()
+	if err != nil || len(caBundle) == 0 {
+		return cfg
+	}
+
+	pool, err := x509.SystemCertPool()
+	if err != nil || pool == nil {
+		pool = x509.NewCertPool()
+	}
+	if pool.AppendCertsFromPEM(caBundle) {
+		cfg.RootCAs = pool
+	}
+
+	return cfg
 }
 
 // Sources configuration
@@ -424,6 +454,16 @@ func (c *Configuration) Validate() error {
 		_, err := url.Parse(dest.URL)
 		if err != nil {
 			return fmt.Errorf("destination %s has invalid base url: %w", dest.ID, err)
+		}
+
+		if dest.CACert != "" {
+			caBundle, err := os.ReadFile(dest.CACert)
+			if err != nil {
+				return fmt.Errorf("destination %s: cannot read ca_cert %q: %w", dest.ID, dest.CACert, err)
+			}
+			if !x509.NewCertPool().AppendCertsFromPEM(caBundle) {
+				return fmt.Errorf("destination %s: no valid certificates found in ca_cert %q", dest.ID, dest.CACert)
+			}
 		}
 	}
 

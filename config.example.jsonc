@@ -103,7 +103,8 @@
             "token": "", // Personal access token for Gitea user authentication.
             "timeout": 7200, // Timeout for all HTTP requests in seconds, Defaults to 10 minutes
             "git_timeout": 7200, // Timeout for all Git requests in seconds, Defaults to 1 hour
-            "ignore_tls": true // To ignore TLS certificate errors
+            "ignore_tls": true, // To ignore TLS certificate errors
+            "ca_cert": "/path/to/ca.pem" // Path to a PEM CA bundle to verify the destination's TLS cert (use instead of ignore_tls to keep verification; on macOS this also avoids Apple rejecting long-lived certs as "not standards compliant")
         }
     ],
     // Defines the source platforms from which repositories will be synced.

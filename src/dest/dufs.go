@@ -2,7 +2,6 @@ package dest
 
 import (
 	"bytes"
-	"crypto/tls"
 	"fmt"
 	"io"
 	"main/src/configuration"
@@ -30,7 +29,7 @@ func NewDufs(config configuration.ConfigDestination) *Dufs {
 		client: &http.Client{
 			Timeout: config.Timeout,
 			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{InsecureSkipVerify: config.IgnoreTLS},
+				TLSClientConfig: config.TLSConfig(),
 			},
 		},
 		config: &config,

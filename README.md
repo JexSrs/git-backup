@@ -71,7 +71,15 @@ This tool supports synchronization with the following sources:
 
 Populate the `config.json` file (`jsonc` is also supported), see [config.example.jsonc](./config.example.jsonc).
 
-Use the `docker compose` command to create and start the container.
+Build and run locally with `make` (the binary reads `config.jsonc` from the working directory, so run it from the repo root):
+
+```shell
+make build   # compile to ./bin/git-backup
+make run     # build and run
+make help    # list all targets
+```
+
+Or use the `docker compose` command to create and start the container.
 
 ```shell
 docker compose up --build -d

@@ -2,7 +2,6 @@ package dest
 
 import (
 	"bytes"
-	"crypto/tls"
 	"fmt"
 	"main/src/configuration"
 	"main/src/sources"
@@ -31,23 +30,35 @@ type Repository struct {
 	LocalRepository *git.Repository
 
 	OverrideRemoteBranch string
+
+	DstIgnoreTLS bool
+	DstCABundle  []byte
 }
 
 func (r *Repository) CloneFromSource(source sources.Source, dstCfg configuration.ConfigDestination) error {
 	path := filepath.Join("/tmp/git-backup/", r.Name)
 	os.RemoveAll(path)
 
+	caBundle, err := dstCfg.LoadCABundle()
+	if err != nil {
+		return err
+	}
+	r.DstIgnoreTLS = dstCfg.IgnoreTLS
+	r.DstCABundle = caBundle
+
 	customClient := &http.Client{
 		Timeout: dstCfg.Timeout,
 		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: dstCfg.IgnoreTLS},
+			TLSClientConfig: dstCfg.TLSConfig(),
 		},
 	}
 
 	client.InstallProtocol("https", githttp.NewClient(customClient))
 
 	gr, err := git.PlainClone(path, false, &git.CloneOptions{
-		URL: r.Remote.URL,
+		URL:             r.Remote.URL,
+		InsecureSkipTLS: dstCfg.IgnoreTLS,
+		CABundle:        caBundle,
 		Auth: func() *githttp.BasicAuth {
 			username, password := source.FetchUsernamePassword()
 			if len(username) == 0 && len(password) == 0 {
@@ -83,8 +94,8 @@ func (r *Repository) GetLocalBranches() ([]string, error) {
 		name := ref.Name().String()
 
 		// For Gitlab sources
-		if strings.HasPrefix(name, "refs/heads/") {
-			name = strings.TrimPrefix(name, "refs/heads/")
+		if after, ok := strings.CutPrefix(name, "refs/heads/"); ok {
+			name = after
 		}
 
 		names = append(names, name)
@@ -109,7 +120,9 @@ func (r *Repository) PushLocalBranch(branch, remoteID string) error {
 		RefSpecs: []config.RefSpec{
 			config.RefSpec("refs/heads/" + branch + ":refs/heads/" + remoteBranch),
 		},
-		Force: true,
+		Force:           true,
+		InsecureSkipTLS: r.DstIgnoreTLS,
+		CABundle:        r.DstCABundle,
 	}
 
 	// Perform the push
@@ -126,9 +139,11 @@ func (r *Repository) PushAllTags(remoteID string) error {
 	}
 
 	pushOptions := &git.PushOptions{
-		RemoteName: remoteID,
-		RefSpecs:   []config.RefSpec{"refs/tags/*:refs/tags/*"},
-		Force:      true,
+		RemoteName:      remoteID,
+		RefSpecs:        []config.RefSpec{"refs/tags/*:refs/tags/*"},
+		Force:           true,
+		InsecureSkipTLS: r.DstIgnoreTLS,
+		CABundle:        r.DstCABundle,
 	}
 
 	// Perform the push

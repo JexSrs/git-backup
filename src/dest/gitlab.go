@@ -2,7 +2,6 @@ package dest
 
 import (
 	"bytes"
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -39,7 +38,7 @@ func NewGitLab(config configuration.ConfigDestination) *GitLab {
 		client: &http.Client{
 			Timeout: config.Timeout,
 			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{InsecureSkipVerify: config.IgnoreTLS},
+				TLSClientConfig: config.TLSConfig(),
 			},
 		},
 		config: &config,

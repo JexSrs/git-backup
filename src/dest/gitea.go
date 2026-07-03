@@ -2,7 +2,6 @@ package dest
 
 import (
 	"bytes"
-	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -38,7 +37,7 @@ func NewGitea(config configuration.ConfigDestination) *Gitea {
 		client: &http.Client{
 			Timeout: config.Timeout,
 			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{InsecureSkipVerify: config.IgnoreTLS},
+				TLSClientConfig: config.TLSConfig(),
 			},
 		},
 		config: &config,
