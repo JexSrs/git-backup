@@ -1,6 +1,10 @@
 {
     // Global configuration that applies to all sourced groups and repositories unless specifically overridden locally.
     "config": {
+        // How many times a failed page fetch or repository sync is retried before giving up; defaults to 0 (no retries).
+        // Attempts back off exponentially: 2s, 5s, 10s, then doubling, capped at 2 minutes.
+        // Like every other key in "config", it can be overridden per source, per group and per repository.
+        "retries": 0,
         "destination": "gitlab",
         "lfs": true, // Fetch LFS (true) or not (false)
         // Determines whether to fetch the repository's avatar (true) or not (false); defaults to true
@@ -116,7 +120,10 @@
                 "token": "" // Personal access token for GitHub user authentication.
             },
             // Overrides global configuration for GitHub-sourced repositories, if specified.
-            "config": {/*...*/},
+            "config": {
+                "retries": 3 // e.g. retry failures of GitHub-sourced repositories 3 times
+                /*...*/
+            },
             // Overrides global filters for GitHub-sourced repositories, if specified.
             "filter": {/*...*/}
         },
@@ -170,7 +177,10 @@
             "gitlab_group_id": 1227, // Parent GitLab group ID where the repositories will be saved.
             "include_only": ["OpenSearch"], // If set, only specified repositories will be synced.
             // Local overriding configuration specific to this group.
-            "config": {/*...*/},
+            "config": {
+                "retries": 5 // e.g. retry failures of this group's repositories 5 times
+                /*...*/
+            },
             // Local overriding filters specific to this group.
             "filter": {/*...*/},
             // Configuration of specific repositories. If empty, will use group's configuration.
@@ -184,6 +194,7 @@
                         }
                     },
                     // Local overriding configuration specific to this repository.,
+                    "retries": 1, // e.g. retry failures of this repository only once
                     "wiki": {
                         "exclude": true
                     },

@@ -335,7 +335,12 @@ func TestConfigGroup_GetConfig(t *testing.T) {
 // --- DefaultFrom ---
 
 func fullRepoConfig(tag string) ConfigRepo {
+	n := 1
+	if tag == "b" {
+		n = 2
+	}
 	return ConfigRepo{
+		Retries:     intPtr(n),
 		FetchAvatar: boolPtr(tag == "a"),
 		Destination: strPtr("dest-" + tag),
 		LFS:         boolPtr(tag == "a"),

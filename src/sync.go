@@ -8,9 +8,23 @@ import (
 	"main/src/sources"
 	"main/src/utils"
 	"strings"
+	"time"
 
 	"github.com/pkg/errors"
 )
+
+// retrySleep waits between retry attempts; tests replace it so they never block.
+var retrySleep = time.Sleep
+
+// withRetries runs fn and, when it fails, retries it as many times as cfg allows,
+// backing off between attempts and reporting every failed attempt.
+func withRetries(cfg configuration.ConfigRepo, what string, fn func() error) error {
+	retries := cfg.RetryCount()
+	return utils.Retry(retries, retrySleep, func(attempt int, wait time.Duration, err error) {
+		fmt.Printf("- %s failed (attempt %d of %d): %v\n", what, attempt, retries+1, err)
+		fmt.Printf("- Retrying in %s...\n", wait)
+	}, fn)
+}
 
 func SyncUser(dst map[string]dest.Destination, groupCfg configuration.ConfigGroup, source sources.Source) {
 	fmt.Println("\n================================================================")
@@ -19,7 +33,17 @@ func SyncUser(dst map[string]dest.Destination, groupCfg configuration.ConfigGrou
 
 	count := 1
 
-	result, err := source.Paginate(groupCfg.Username, groupCfg, nil)
+	paginate := func(prev *sources.PaginationResponse) (*sources.PaginationResponse, error) {
+		var page *sources.PaginationResponse
+		err := withRetries(groupCfg.Config, "Fetching repositories", func() error {
+			var err error
+			page, err = source.Paginate(groupCfg.Username, groupCfg, prev)
+			return err
+		})
+		return page, err
+	}
+
+	result, err := paginate(nil)
 	for {
 		if err != nil {
 			fmt.Println(err)
@@ -54,14 +78,16 @@ func SyncUser(dst map[string]dest.Destination, groupCfg configuration.ConfigGrou
 
 			fmt.Printf("\n%d. Evaluating repository %s\n", count, remote.Name)
 			cfg := groupCfg.GetConfig(remote.Name)
-			if err := SyncRepo(dst, source, remote, cfg, groupCfg); err != nil {
+			if err := withRetries(cfg, "Syncing repository "+remote.Name, func() error {
+				return SyncRepo(dst, source, remote, cfg, groupCfg)
+			}); err != nil {
 				log.Fatal(err)
 			}
 
 			count++
 		}
 
-		result, err = source.Paginate(groupCfg.Username, groupCfg, result)
+		result, err = paginate(result)
 	}
 }
 

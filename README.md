@@ -17,6 +17,7 @@ The following features are available:
 - Fetch subgroup/repository avatar (available only from GitLab sources).
 - Set the original repository url in the CI/CD variables
 - Create the destination owner when it is missing (Gitea only, opt-in via `create_owner`)
+- Retry failed page fetches and repository syncs with exponential backoff (opt-in via `config.retries`)
 - Include only / Exclude repositories
 - Filters based on
     - Visibility & archived status
@@ -93,6 +94,28 @@ When `--config` is given, only that file is read; if it does not exist the progr
 Without it, the binary looks in the working directory for `config.json`, `configuration.json`, `config.jsonc`
 or `configuration.jsonc`, in that order.
 
+### Retries
+
+Transient failures (for example the destination not being able to reach the source while importing) abort the run
+by default. Set `retries` inside `config` to retry a failed page fetch or repository sync that many times before
+giving up. Like every other `config` key it can be set globally, per source, per group and per repository; the most
+specific value wins and the default is `0`.
+
+Attempts back off exponentially: 2 seconds before the first retry, then 5, then 10, doubling after that and capped at
+2 minutes between attempts.
+
+```jsonc
+{
+    "config": { "retries": 3 }, // global
+    "sources": [{ "id": "github", "config": { "retries": 5 } }], // overrides global for github groups
+    "groups": [{
+        "source": "github", "username": "octo",
+        "config": { "retries": 0 }, // overrides the source for this group
+        "repositories": [{ "name": "flaky", "retries": 10 }] // overrides the group for one repository
+    }]
+}
+```
+
 Or use the `docker compose` command to create and start the container.
 
 ```shell
@@ -110,7 +133,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## TODO
 - Add go-gitea and lavaforge as a source
-- Add retry logic and delay between retries
 - Check latest commit's hash for existing entries to skip in case of no updates
 - Enhance filters
     - releases (min, max)

@@ -95,11 +95,20 @@ type ConfigSource struct {
 // Repository configuration
 
 type ConfigRepo struct {
+	Retries     *int               `json:"retries"` // times a failed page fetch or repository sync is retried; defaults to 0
 	FetchAvatar *bool              `json:"fetch_avatar"`
 	Destination *string            `json:"destination"`
 	LFS         *bool              `json:"lfs"`
 	Wiki        ConfigRepoWiki     `json:"wiki"`
 	Releases    ConfigRepoReleases `json:"releases"`
+}
+
+// RetryCount returns how many times a failed operation is retried; nil counts as 0.
+func (c ConfigRepo) RetryCount() int {
+	if c.Retries == nil {
+		return 0
+	}
+	return *c.Retries
 }
 
 type ConfigRepoWiki struct {
@@ -200,6 +209,7 @@ func (c *Configuration) PopulateDefault() {
 	})
 
 	c.Config.DefaultFrom(ConfigRepo{
+		Retries:     utils.Pointer(0),
 		FetchAvatar: utils.Pointer(true),
 		LFS:         utils.Pointer(true),
 		Wiki: ConfigRepoWiki{
@@ -281,6 +291,10 @@ func (c *Configuration) PopulateDefault() {
 }
 
 func (c *ConfigRepo) DefaultFrom(from ConfigRepo) {
+	if c.Retries == nil {
+		c.Retries = from.Retries
+	}
+
 	if c.FetchAvatar == nil {
 		c.FetchAvatar = from.FetchAvatar
 	}
@@ -441,10 +455,18 @@ func (c *ConfigFilter) DefaultFrom(from ConfigFilter) {
 }
 
 func (c *Configuration) Validate() error {
+	if c.Config.Retries != nil && *c.Config.Retries < 0 {
+		return fmt.Errorf("config.retries must be zero or positive, got %d", *c.Config.Retries)
+	}
+
 	for _, source := range c.Sources {
 		_, err := url.Parse(source.BaseURL)
 		if err != nil {
 			return fmt.Errorf("source %s has invalid base url: %w", source.ID, err)
+		}
+
+		if source.Config.Retries != nil && *source.Config.Retries < 0 {
+			return fmt.Errorf("source %s: config.retries must be zero or positive, got %d", source.ID, *source.Config.Retries)
 		}
 	}
 
@@ -482,12 +504,20 @@ func (c *Configuration) Validate() error {
 			return fmt.Errorf("gitlab_group_id is invalid at index %d", i)
 		}
 
+		if group.Config.Retries != nil && *group.Config.Retries < 0 {
+			return fmt.Errorf("config.retries must be zero or positive at index %d, got %d", i, *group.Config.Retries)
+		}
+
 		for j, repo := range group.Repositories {
 			if len(repo.Name) == 0 && !utils.CheckPrefix(source.ID, "git") {
 				return fmt.Errorf("name is required at index %d.%d", i, j)
 			}
 
 			assetsEnabled = assetsEnabled || !*repo.Releases.Assets.Exclude
+
+			if repo.Retries != nil && *repo.Retries < 0 {
+				return fmt.Errorf("retries must be zero or positive at index %d.%d, got %d", i, j, *repo.Retries)
+			}
 
 			if repo.Destination == nil {
 				return fmt.Errorf("repository destination is required at index %d.%d", i, j)

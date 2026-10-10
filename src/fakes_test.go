@@ -16,11 +16,12 @@ func ptr[T any](v T) *T { return &v }
 
 // fakeSource serves pre-defined pages of repositories and canned releases.
 type fakeSource struct {
-	pages       [][]sources.SourceRepository
-	failOnPage  int // 1-based page whose fetch fails; 0 never fails
-	releases    map[string][]sources.SourceRelease
-	releasesErr error
-	wikiURLs    map[string]string // repository name → wiki clone url
+	pages         [][]sources.SourceRepository
+	failOnPage    int // 1-based page whose fetch fails; 0 never fails
+	failPageTimes int // how many fetches of failOnPage fail before it succeeds; 0 means every fetch
+	releases      map[string][]sources.SourceRelease
+	releasesErr   error
+	wikiURLs      map[string]string // repository name → wiki clone url
 }
 
 func (f *fakeSource) Paginate(_ string, _ configuration.ConfigGroup, prev *sources.PaginationResponse) (*sources.PaginationResponse, error) {
@@ -29,6 +30,12 @@ func (f *fakeSource) Paginate(_ string, _ configuration.ConfigGroup, prev *sourc
 		page = prev.NextPage
 	}
 	if f.failOnPage == page+1 {
+		if f.failPageTimes > 0 {
+			f.failPageTimes--
+			if f.failPageTimes == 0 {
+				f.failOnPage = 0
+			}
+		}
 		return nil, fmt.Errorf("page %d unavailable", page+1)
 	}
 	if page >= len(f.pages) {
@@ -65,6 +72,7 @@ type fakeDest struct {
 	remotes   map[string]string           // local repository name → bare repository AddRemoteToRepo points at
 	uploadURL string
 	errs      map[string]error // method name → error to return
+	onceErrs  map[string]error // method name → error to return on its next call only
 
 	calls   []string
 	avatars map[string][]byte // extension → uploaded bytes
@@ -82,6 +90,7 @@ func newFakeDest(id string) *fakeDest {
 		remotes:   map[string]string{},
 		uploadURL: "https://" + id + ".local/stored",
 		errs:      map[string]error{},
+		onceErrs:  map[string]error{},
 		avatars:   map[string][]byte{},
 		uploads:   map[string][]byte{},
 	}
@@ -89,7 +98,13 @@ func newFakeDest(id string) *fakeDest {
 
 func (f *fakeDest) record(call string) { f.calls = append(f.calls, call) }
 
-func (f *fakeDest) fail(method string) error { return f.errs[method] }
+func (f *fakeDest) fail(method string) error {
+	if err, ok := f.onceErrs[method]; ok {
+		delete(f.onceErrs, method)
+		return err
+	}
+	return f.errs[method]
+}
 
 // callsWithPrefix returns the recorded calls starting with prefix, with the prefix removed.
 func (f *fakeDest) callsWithPrefix(prefix string) []string {
