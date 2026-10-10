@@ -65,14 +65,15 @@ type fakeDest struct {
 	cfg  configuration.ConfigDestination
 	caps dest.DestinationIDRepository
 
-	existing  map[string]*dest.Repository // remote name → repository returned by RetrieveExistingRepo
-	protected []string
-	releases  map[string]bool             // tags that already exist in the destination
-	wikis     map[string]*dest.Repository // repository name → wiki returned by GetWikiProject
-	remotes   map[string]string           // local repository name → bare repository AddRemoteToRepo points at
-	uploadURL string
-	errs      map[string]error // method name → error to return
-	onceErrs  map[string]error // method name → error to return on its next call only
+	existing   map[string]*dest.Repository // remote name → repository returned by RetrieveExistingRepo
+	protected  []string
+	releases   map[string]bool             // tags that already exist in the destination
+	wikis      map[string]*dest.Repository // repository name → wiki returned by GetWikiProject
+	remotes    map[string]string           // local repository name → bare repository AddRemoteToRepo points at
+	remoteURLs map[string]string           // local repository name → url RemoteURL reports instead of the bare repository
+	uploadURL  string
+	errs       map[string]error // method name → error to return
+	onceErrs   map[string]error // method name → error to return on its next call only
 
 	calls   []string
 	avatars map[string][]byte // extension → uploaded bytes
@@ -81,18 +82,19 @@ type fakeDest struct {
 
 func newFakeDest(id string) *fakeDest {
 	return &fakeDest{
-		id:        id,
-		cfg:       configuration.ConfigDestination{ID: id, URL: "http://" + id + ".local", Timeout: time.Minute},
-		caps:      dest.DestinationIDRepository{Avatar: true, Wiki: true, Releases: true},
-		existing:  map[string]*dest.Repository{},
-		releases:  map[string]bool{},
-		wikis:     map[string]*dest.Repository{},
-		remotes:   map[string]string{},
-		uploadURL: "https://" + id + ".local/stored",
-		errs:      map[string]error{},
-		onceErrs:  map[string]error{},
-		avatars:   map[string][]byte{},
-		uploads:   map[string][]byte{},
+		id:         id,
+		cfg:        configuration.ConfigDestination{ID: id, URL: "http://" + id + ".local", Timeout: time.Minute},
+		caps:       dest.DestinationIDRepository{Avatar: true, Wiki: true, Releases: true},
+		existing:   map[string]*dest.Repository{},
+		releases:   map[string]bool{},
+		wikis:      map[string]*dest.Repository{},
+		remotes:    map[string]string{},
+		remoteURLs: map[string]string{},
+		uploadURL:  "https://" + id + ".local/stored",
+		errs:       map[string]error{},
+		onceErrs:   map[string]error{},
+		avatars:    map[string][]byte{},
+		uploads:    map[string][]byte{},
 	}
 }
 
@@ -157,6 +159,14 @@ func (f *fakeDest) GetProtectedBranches(_ *dest.Repository) ([]string, error) {
 func (f *fakeDest) UnprotectBranch(_ *dest.Repository, branch string) error {
 	f.record("UnprotectBranch:" + branch)
 	return f.fail("UnprotectBranch")
+}
+
+// RemoteURL is a plain getter and is deliberately not recorded as a call.
+func (f *fakeDest) RemoteURL(repo *dest.Repository) string {
+	if u, ok := f.remoteURLs[repo.Name]; ok {
+		return u
+	}
+	return f.remotes[repo.Name]
 }
 
 func (f *fakeDest) AddRemoteToRepo(repo *dest.Repository) error {

@@ -311,19 +311,24 @@ func (g *Gitea) UnprotectBranch(repo *Repository, branch string) error {
 	return err
 }
 
+func (g *Gitea) RemoteURL(repo *Repository) string {
+	parsedURL, err := url.Parse(repo.HttpUrl)
+	if err != nil {
+		return ""
+	}
+	parsedURL.User = url.UserPassword("oauth2", g.APIToken)
+	return parsedURL.String()
+}
+
 func (g *Gitea) AddRemoteToRepo(repo *Repository) error {
 	if repo.LocalRepository == nil {
 		return fmt.Errorf("no local repository found for project %s", repo.ID)
 	}
 
-	// Create url
-	parsedURL, _ := url.Parse(repo.HttpUrl)
-	parsedURL.User = url.UserPassword("oauth2", g.APIToken)
-
-	// Add a new remote, named "gitlab"
+	// Add a new remote named after the destination
 	_, err := repo.LocalRepository.CreateRemote(&config.RemoteConfig{
 		Name: g.ID,
-		URLs: []string{parsedURL.String()},
+		URLs: []string{g.RemoteURL(repo)},
 	})
 	return err
 }

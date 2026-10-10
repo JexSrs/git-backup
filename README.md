@@ -18,6 +18,8 @@ The following features are available:
 - Set the original repository url in the CI/CD variables
 - Create the destination owner when it is missing (Gitea only, opt-in via `create_owner`)
 - Retry failed page fetches and repository syncs with exponential backoff (opt-in via `config.retries`)
+- Skip cloning repositories whose branches and tags already match the destination (compared with a `git ls-remote`
+  of both sides, so no clone is needed to find out)
 - Include only / Exclude repositories
 - Filters based on
     - Visibility & archived status
@@ -141,7 +143,6 @@ fixes.
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## TODO
-- Check latest commit's hash for existing entries to skip in case of no updates
 - Enhance filters
     - releases (min, max)
     - all issues (min, max)

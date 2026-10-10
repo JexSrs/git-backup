@@ -13,6 +13,7 @@ import (
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/transport"
 	"github.com/go-git/go-git/v5/plumbing/transport/client"
 	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 )
@@ -35,10 +36,9 @@ type Repository struct {
 	DstCABundle  []byte
 }
 
-func (r *Repository) CloneFromSource(source sources.Source, dstCfg configuration.ConfigDestination) error {
-	path := filepath.Join("/tmp/git-backup/", r.Name)
-	os.RemoveAll(path)
-
+// useDestinationTransport records the destination's TLS settings on the repository and installs an
+// HTTPS client honouring the destination's timeout and certificates for every go-git operation.
+func (r *Repository) useDestinationTransport(dstCfg configuration.ConfigDestination) error {
 	caBundle, err := dstCfg.LoadCABundle()
 	if err != nil {
 		return err
@@ -52,23 +52,32 @@ func (r *Repository) CloneFromSource(source sources.Source, dstCfg configuration
 			TLSClientConfig: dstCfg.TLSConfig(),
 		},
 	}
-
 	client.InstallProtocol("https", githttp.NewClient(customClient))
+	return nil
+}
+
+// sourceAuth turns the source credentials into go-git basic auth, or nil when there are none.
+func sourceAuth(source sources.Source) transport.AuthMethod {
+	username, password := source.FetchUsernamePassword()
+	if len(username) == 0 && len(password) == 0 {
+		return nil
+	}
+	return &githttp.BasicAuth{Username: username, Password: password}
+}
+
+func (r *Repository) CloneFromSource(source sources.Source, dstCfg configuration.ConfigDestination) error {
+	path := filepath.Join("/tmp/git-backup/", r.Name)
+	os.RemoveAll(path)
+
+	if err := r.useDestinationTransport(dstCfg); err != nil {
+		return err
+	}
 
 	gr, err := git.PlainClone(path, false, &git.CloneOptions{
 		URL:             r.Remote.URL,
-		InsecureSkipTLS: dstCfg.IgnoreTLS,
-		CABundle:        caBundle,
-		Auth: func() *githttp.BasicAuth {
-			username, password := source.FetchUsernamePassword()
-			if len(username) == 0 && len(password) == 0 {
-				return nil
-			}
-			return &githttp.BasicAuth{
-				Username: username,
-				Password: password,
-			}
-		}(),
+		InsecureSkipTLS: r.DstIgnoreTLS,
+		CABundle:        r.DstCABundle,
+		Auth:            sourceAuth(source),
 	})
 
 	if err != nil {
@@ -186,6 +195,9 @@ type Destination interface {
 	GetProtectedBranches(repo *Repository) ([]string, error)
 	UnprotectBranch(repo *Repository, branch string) error
 
+	// RemoteURL returns the url, credentials included, through which the destination repository is
+	// listed and pushed to; empty when the destination cannot host repositories.
+	RemoteURL(repo *Repository) string
 	AddRemoteToRepo(repo *Repository) error
 	ChangeArchivedState(repo *Repository, isArchived bool) error
 

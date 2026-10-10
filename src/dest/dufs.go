@@ -76,6 +76,10 @@ func (g *Dufs) CloneFromSource(repo *Repository, source sources.Source) error {
 	return fmt.Errorf("not implemented")
 }
 
+func (g *Dufs) RemoteURL(repo *Repository) string {
+	return ""
+}
+
 func (g *Dufs) AddRemoteToRepo(repo *Repository) error {
 	return fmt.Errorf("not implemented")
 }

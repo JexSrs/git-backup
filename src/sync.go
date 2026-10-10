@@ -169,44 +169,58 @@ func SyncRepo(
 			return nil
 		}
 
-		fmt.Println("- Cloning repository from source...")
-		if err := repo.CloneFromSource(source, *dstID.Config); err != nil {
-			return errors.Wrap(err, "failed to clone source")
-		}
-
-		defer func() {
-			if err := repo.Prune(); err != nil {
-				fmt.Println(errors.Wrap(err, "failed to prune project"))
-			}
-		}()
-
-		fmt.Println("- Adding destination as a remote repository..")
-		if err := gitDst.AddRemoteToRepo(repo); err != nil {
-			return errors.Wrap(err, "failed to add destination as a remote repository")
-		}
-
 		// Un-archive project to sync branches/releases (in case it was archived and re-archived from last time)
 		if err := gitDst.ChangeArchivedState(repo, false); err != nil {
 			return errors.Wrap(err, "failed to change project archive state")
 		}
 
-		fmt.Println("- Pushing branches...")
-		branches, err := repo.GetLocalBranches()
+		fmt.Println("- Comparing source and destination branches and tags...")
+		upToDate, differences, err := repo.IsUpToDate(source, gitDst.RemoteURL(repo), *dstID.Config)
 		if err != nil {
-			return errors.Wrap(err, "failed to retrieve local branches")
+			fmt.Println("  - Could not compare, syncing anyway:", err)
 		}
 
-		fmt.Printf("  - Found %d branches\n", len(branches))
-		for _, branch := range branches {
-			fmt.Printf("  - Pushing %s...\n", branch)
-			if err := repo.PushLocalBranch(branch, dstID.ID); err != nil {
-				return errors.Wrapf(err, "failed to sync branch %s", branch)
+		if upToDate {
+			fmt.Println("  - Destination already has every branch and tag of the source, skipping clone")
+		} else {
+			if err == nil {
+				printRefDifferences(differences)
 			}
-		}
 
-		fmt.Println("- Pushing tags...")
-		if err := repo.PushAllTags(dstID.ID); err != nil {
-			return errors.Wrap(err, "failed to sync tags")
+			fmt.Println("- Cloning repository from source...")
+			if err := repo.CloneFromSource(source, *dstID.Config); err != nil {
+				return errors.Wrap(err, "failed to clone source")
+			}
+
+			defer func() {
+				if err := repo.Prune(); err != nil {
+					fmt.Println(errors.Wrap(err, "failed to prune project"))
+				}
+			}()
+
+			fmt.Println("- Adding destination as a remote repository..")
+			if err := gitDst.AddRemoteToRepo(repo); err != nil {
+				return errors.Wrap(err, "failed to add destination as a remote repository")
+			}
+
+			fmt.Println("- Pushing branches...")
+			branches, err := repo.GetLocalBranches()
+			if err != nil {
+				return errors.Wrap(err, "failed to retrieve local branches")
+			}
+
+			fmt.Printf("  - Found %d branches\n", len(branches))
+			for _, branch := range branches {
+				fmt.Printf("  - Pushing %s...\n", branch)
+				if err := repo.PushLocalBranch(branch, dstID.ID); err != nil {
+					return errors.Wrapf(err, "failed to sync branch %s", branch)
+				}
+			}
+
+			fmt.Println("- Pushing tags...")
+			if err := repo.PushAllTags(dstID.ID); err != nil {
+				return errors.Wrap(err, "failed to sync tags")
+			}
 		}
 	}
 
@@ -373,6 +387,20 @@ func SyncRepo(
 	}
 
 	return nil
+}
+
+// printRefDifferences lists the branches and tags that need syncing, capped so large repositories stay readable.
+func printRefDifferences(differences []dest.RefDifference) {
+	const maxLines = 10
+
+	fmt.Printf("  - %d branches/tags need syncing\n", len(differences))
+	for i, difference := range differences {
+		if i == maxLines {
+			fmt.Printf("    - ... and %d more\n", len(differences)-maxLines)
+			break
+		}
+		fmt.Println("    -", difference)
+	}
 }
 
 func skipFromFilter(remote sources.SourceRepository, filter configuration.ConfigFilter) bool {

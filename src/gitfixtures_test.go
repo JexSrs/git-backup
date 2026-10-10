@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 )
@@ -78,4 +79,27 @@ func uniqueName(t *testing.T) string {
 
 func clonePath(name string) string {
 	return filepath.Join("/tmp/git-backup", name)
+}
+
+// pushAllRefs mirrors every branch and tag of the repository at srcDir into the bare repository at dstDir,
+// leaving the destination exactly in sync with the source.
+func pushAllRefs(t *testing.T, srcDir, dstDir string) {
+	t.Helper()
+	repo, err := git.PlainOpen(srcDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	remote, err := repo.CreateRemote(&config.RemoteConfig{Name: "mirror", URLs: []string{dstDir}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = remote.Push(&git.PushOptions{RemoteName: "mirror", RefSpecs: []config.RefSpec{
+		"+refs/heads/*:refs/heads/*", "+refs/tags/*:refs/tags/*",
+	}})
+	if err != nil && err != git.NoErrAlreadyUpToDate {
+		t.Fatal(err)
+	}
+	if err := repo.DeleteRemote("mirror"); err != nil {
+		t.Fatal(err)
+	}
 }

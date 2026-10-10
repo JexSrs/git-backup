@@ -576,8 +576,8 @@ func TestSyncRepo_PushesAnExistingRepositoryToTheDestination(t *testing.T) {
 	expectCalls(t, f.git.calls, []string{
 		"EnsureOwner:octo",
 		"RetrieveExistingRepo:alpha",
-		"AddRemoteToRepo:" + name,
 		"ChangeArchivedState:false",
+		"AddRemoteToRepo:" + name,
 	})
 	ref, err := bare.Reference(plumbing.ReferenceName("refs/heads/"+defaultBranch), false)
 	if err != nil || ref.Hash() != hash {
@@ -589,6 +589,62 @@ func TestSyncRepo_PushesAnExistingRepositoryToTheDestination(t *testing.T) {
 	}
 	if _, err := os.Stat(clonePath(name)); !os.IsNotExist(err) {
 		t.Fatalf("expected the clone to be pruned, stat returned %v", err)
+	}
+}
+
+func TestSyncRepo_SkipsTheCloneWhenTheDestinationAlreadyHasEveryBranchAndTag(t *testing.T) {
+	requireGit(t)
+	srcDir, _, _ := newSourceRepo(t)
+	bareDir, _ := newBareRepo(t)
+	pushAllRefs(t, srcDir, bareDir)
+
+	f := newSyncFixture()
+	name := uniqueName(t)
+	remote := remoteNamed("alpha")
+	remote.URL = srcDir
+	f.git.existing["alpha"] = &dest.Repository{ID: "7", Name: name, FinishedMiration: true, Remote: remote}
+	f.git.remotes[name] = bareDir
+
+	if err := SyncRepo(f.dsts, f.source, remote, repoConfig("gitea", "dufs"), groupConfig()); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	expectCalls(t, f.git.calls, []string{
+		"EnsureOwner:octo",
+		"RetrieveExistingRepo:alpha",
+		"ChangeArchivedState:false",
+	})
+	if _, err := os.Stat(clonePath(name)); !os.IsNotExist(err) {
+		t.Fatalf("expected no clone to be made, stat returned %v", err)
+	}
+}
+
+func TestSyncRepo_SyncsNormallyWhenTheUpdateCheckCannotRun(t *testing.T) {
+	requireGit(t)
+	srcDir, hash, defaultBranch := newSourceRepo(t)
+	bareDir, bare := newBareRepo(t)
+
+	f := newSyncFixture()
+	name := uniqueName(t)
+	remote := remoteNamed("alpha")
+	remote.URL = srcDir
+	f.git.existing["alpha"] = &dest.Repository{ID: "7", Name: name, FinishedMiration: true, Remote: remote}
+	f.git.remotes[name] = bareDir
+	f.git.remoteURLs[name] = filepath.Join(t.TempDir(), "unreachable") // the comparison fails, the push must still happen
+
+	if err := SyncRepo(f.dsts, f.source, remote, repoConfig("gitea", "dufs"), groupConfig()); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	expectCalls(t, f.git.calls, []string{
+		"EnsureOwner:octo",
+		"RetrieveExistingRepo:alpha",
+		"ChangeArchivedState:false",
+		"AddRemoteToRepo:" + name,
+	})
+	ref, err := bare.Reference(plumbing.ReferenceName("refs/heads/"+defaultBranch), false)
+	if err != nil || ref.Hash() != hash {
+		t.Fatalf("expected the default branch to be pushed despite the failed check, got (%v, %v)", ref, err)
 	}
 }
 
