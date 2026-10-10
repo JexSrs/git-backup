@@ -16,6 +16,9 @@ func TestMapSources_SelectsTheImplementationByIDPrefix(t *testing.T) {
 		{ID: "gitlab-custom-1", BaseURL: "https://gitlab.example.com"},
 		{ID: "git"},
 		{ID: "git-proxmox"},
+		{ID: "gitea", BaseURL: "https://gitea.example.com"},
+		{ID: "gitea-home", BaseURL: "https://gitea.home.lan"},
+		{ID: "lavaforge", BaseURL: "https://lavaforge.org"},
 		{ID: "bitbucket"},
 	}}
 
@@ -25,6 +28,7 @@ func TestMapSources_SelectsTheImplementationByIDPrefix(t *testing.T) {
 	isHuggingFace := func(s sources.Source) bool { _, ok := s.(*sources.HuggingFace); return ok }
 	isGitlab := func(s sources.Source) bool { _, ok := s.(*sources.Gitlab); return ok }
 	isGit := func(s sources.Source) bool { _, ok := s.(*sources.Git); return ok }
+	isGitea := func(s sources.Source) bool { _, ok := s.(*sources.Gitea); return ok }
 
 	checks := map[string]func(sources.Source) bool{
 		"github":          isGithub,
@@ -34,6 +38,9 @@ func TestMapSources_SelectsTheImplementationByIDPrefix(t *testing.T) {
 		"gitlab-custom-1": isGitlab,
 		"git":             isGit,
 		"git-proxmox":     isGit,
+		"gitea":           isGitea,
+		"gitea-home":      isGitea,
+		"lavaforge":       isGitea,
 	}
 	for id, check := range checks {
 		if source, ok := got[id]; !ok || !check(source) {

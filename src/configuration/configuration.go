@@ -241,6 +241,10 @@ func (c *Configuration) PopulateDefault() {
 			c.Sources[i].BaseURL = "https://gitlab.com"
 		}
 
+		if utils.CheckPrefix(c.Sources[i].ID, "lavaforge") && len(c.Sources[i].BaseURL) == 0 {
+			c.Sources[i].BaseURL = "https://lavaforge.org"
+		}
+
 		if c.Sources[i].Timeout == 0 {
 			c.Sources[i].Timeout = time.Minute * 10
 		} else {
@@ -467,6 +471,10 @@ func (c *Configuration) Validate() error {
 
 		if source.Config.Retries != nil && *source.Config.Retries < 0 {
 			return fmt.Errorf("source %s: config.retries must be zero or positive, got %d", source.ID, *source.Config.Retries)
+		}
+
+		if utils.CheckPrefix(source.ID, "gitea") && len(source.BaseURL) == 0 {
+			return fmt.Errorf("source %s: base_url is required for gitea sources", source.ID)
 		}
 	}
 

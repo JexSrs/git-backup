@@ -56,6 +56,8 @@ func mapSources(config configuration.Configuration) map[string]sources.Source {
 			ret[source.ID] = sources.NewHuggingFace(source)
 		} else if utils.CheckPrefix(source.ID, "gitlab") {
 			ret[source.ID] = sources.NewGitlab(source)
+		} else if utils.CheckPrefix(source.ID, "gitea") || utils.CheckPrefix(source.ID, "lavaforge") {
+			ret[source.ID] = sources.NewGitea(source)
 		} else if utils.CheckPrefix(source.ID, "git") {
 			ret[source.ID] = sources.NewGit(source)
 		}

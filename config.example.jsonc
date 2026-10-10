@@ -158,6 +158,23 @@
             "filter": {/*...*/}
         },
         {
+            "id": "gitea-home", // Prefix "gitea" + anything else (must be unique). Works with any Gitea or Forgejo instance (self-hosted, gitea.com, Codeberg)
+            "base_url": "https://gitea.home.lan", // Required: the base url of the Gitea/Forgejo instance
+            "auth": {
+                "token": "" // Access token of the instance; required to see private repositories.
+            },
+            "config": {/*...*/},
+            "filter": {/*...*/}
+        },
+        {
+            "id": "lavaforge", // LavaForge (https://lavaforge.org), a hosted Forgejo; "base_url" defaults to https://lavaforge.org
+            "auth": {
+                "token": "" // LavaForge access token; required to see private repositories.
+            },
+            "config": {/*...*/},
+            "filter": {/*...*/}
+        },
+        {
             "id": "git-proxmox",
             "auth": {
                 // For custom authorization
@@ -172,7 +189,7 @@
     // Configuration for specific groups of repositories
     "groups": [
         {
-            "source": "github", // Indicates the source platform: either "github", "gitlab" or "huggingface".
+            "source": "github", // The "id" of the source to read from (github, gitlab*, gitea*, lavaforge*, huggingface or git*).
             "username": "opensearch-project", // Username of the group in the source platform.
             "gitlab_group_id": 1227, // Parent GitLab group ID where the repositories will be saved.
             "include_only": ["OpenSearch"], // If set, only specified repositories will be synced.

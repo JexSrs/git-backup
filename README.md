@@ -35,39 +35,41 @@ This tool supports synchronization with the following sources:
 - **GitHub**
 - **GitLab**
 - **GitLab (self-hosted)**
+- **Gitea / Forgejo** (self-hosted, Codeberg, gitea.com)
+- **LavaForge**
 - **HuggingFace**
 
 **Supported features** per platform:
 
-|                        | GitHub | GitLab | HuggingFace |
-|------------------------|--------|--------|-------------|
-| Branches               | ✅      | ✅      | ✅           |
-| Tags                   | ✅      | ✅      | ✅           |
-| Wiki                   | ✅      | ✅      | ✅           |
-| Releases               | ✅      | ✅      | ✅           |
-| Assets                 | ✅      | ✅      | ✅           |
-| Archived status check  | ✅      | ✅      |             |
-| Avatar                 |        | ✅      |             |
-| Include / Exclude      | ✅      | ✅      | ✅           |
-| Visibility filter      | ✅      | ✅      | ✅           |
-| Regex on name          | ✅      | ✅      | ✅           |
-| Description check      | ✅      | ✅      |             |
-| License check          | ✅      | ✅      |             |
-| Topics check           | ✅      |        |             |
-| Language check         | ✅      |        |             |
-| Pages check            | ✅      |        |             |
-| Discussions check      | ✅      |        |             |
-| Issues check           | ✅      |        |             |
-| Forked check           | ✅      |        |             |
-| Stars check            | ✅      |        |             |
-| Watchers check         | ✅      |        |             |
-| Forks check            | ✅      |        |             |
-| Branches               | ✅      | ✅      | ✅           |
-| Tags check             | ✅      | ✅      | ✅           |
-| Size check             | ✅      |        |             |
-| Open issues check      | ✅      |        |             |
-| Creation date check    | ✅      |        |             |
-| Last update date check | ✅      |        |             |
+|                        | GitHub | GitLab | HuggingFace | Gitea / LavaForge |
+|------------------------|--------|--------|-------------|-------------------|
+| Branches               | ✅      | ✅      | ✅           | ✅                 |
+| Tags                   | ✅      | ✅      | ✅           | ✅                 |
+| Wiki                   | ✅      | ✅      | ✅           | ✅                 |
+| Releases               | ✅      | ✅      | ✅           | ✅                 |
+| Assets                 | ✅      | ✅      | ✅           | ✅                 |
+| Archived status check  | ✅      | ✅      |             | ✅                 |
+| Avatar                 |        | ✅      |             | ✅                 |
+| Include / Exclude      | ✅      | ✅      | ✅           | ✅                 |
+| Visibility filter      | ✅      | ✅      | ✅           | ✅                 |
+| Regex on name          | ✅      | ✅      | ✅           | ✅                 |
+| Description check      | ✅      | ✅      |             | ✅                 |
+| License check          | ✅      | ✅      |             |                   |
+| Topics check           | ✅      |        |             |                   |
+| Language check         | ✅      |        |             |                   |
+| Pages check            | ✅      |        |             |                   |
+| Discussions check      | ✅      |        |             |                   |
+| Issues check           | ✅      |        |             |                   |
+| Forked check           | ✅      |        |             | ✅                 |
+| Stars check            | ✅      |        |             |                   |
+| Watchers check         | ✅      |        |             |                   |
+| Forks check            | ✅      |        |             |                   |
+| Branches               | ✅      | ✅      | ✅           | ✅                 |
+| Tags check             | ✅      | ✅      | ✅           | ✅                 |
+| Size check             | ✅      |        |             |                   |
+| Open issues check      | ✅      |        |             |                   |
+| Creation date check    | ✅      |        |             |                   |
+| Last update date check | ✅      |        |             |                   |
 
 ## Setup
 
@@ -93,6 +95,13 @@ make run ARGS="-c ./configs/work.jsonc"
 When `--config` is given, only that file is read; if it does not exist the program exits with an error.
 Without it, the binary looks in the working directory for `config.json`, `configuration.json`, `config.jsonc`
 or `configuration.jsonc`, in that order.
+
+### Gitea, Forgejo and LavaForge sources
+
+Sources whose `id` starts with `gitea` talk to any Gitea or Forgejo instance (self-hosted, gitea.com, Codeberg) and
+need a `base_url`. Sources whose `id` starts with `lavaforge` use the same implementation with `base_url` defaulting to
+`https://lavaforge.org`. In both cases `auth.token` is an access token of the instance and is required to see private
+repositories; the group's `username` may be either a user or an organisation.
 
 ### Retries
 
@@ -132,7 +141,6 @@ fixes.
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## TODO
-- Add go-gitea and lavaforge as a source
 - Check latest commit's hash for existing entries to skip in case of no updates
 - Enhance filters
     - releases (min, max)
