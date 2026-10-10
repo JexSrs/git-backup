@@ -553,7 +553,7 @@ func (g *GitLab) getGroupIdByName(parentGroupId int, group sources.SourceReposit
 	}
 
 	for _, g := range groups {
-		if g.Path == group.Name {
+		if g.Path == group.Path {
 			return g.ID, nil // Return the ID of the existing group
 		}
 	}

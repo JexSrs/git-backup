@@ -6,7 +6,7 @@ PKG     := ./src
 
 .DEFAULT_GOAL := build
 
-.PHONY: build run dev fmt vet tidy clean docker docker-run help
+.PHONY: build run dev test fmt vet tidy clean docker docker-run help
 
 ## build: compile the binary into ./bin/git-backup
 build:
@@ -24,6 +24,10 @@ dev:
 ## fmt: format all Go sources
 fmt:
 	gofmt -w src/
+
+## test: run the test suite
+test:
+	go test $(PKG)/...
 
 ## vet: run go vet
 vet:

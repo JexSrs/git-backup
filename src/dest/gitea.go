@@ -298,7 +298,7 @@ func (g *Gitea) GetProtectedBranches(repo *Repository) ([]string, error) {
 }
 
 func (g *Gitea) UnprotectBranch(repo *Repository, branch string) error {
-	_path := fmt.Sprintf("/api/v1/repos/%s/%s/branche_protections/%s", repo.ConfigGroup.GiteaUsername, repo.Name, branch)
+	_path := fmt.Sprintf("/api/v1/repos/%s/%s/branch_protections/%s", repo.ConfigGroup.GiteaUsername, repo.Name, branch)
 	res, err := g.request(http.MethodDelete, _path, nil, "")
 	if err != nil {
 		return fmt.Errorf("creating request: %w", err)
@@ -471,7 +471,7 @@ func (g *Gitea) CreateWiki(repo *Repository, gConfig configuration.ConfigGroup) 
 		return fmt.Errorf("creating request: %w", err)
 	}
 
-	if res.Status != http.StatusCreated && strings.Contains(string(res.Body), "wiki page already exists") {
+	if res.Status != http.StatusCreated && !strings.Contains(string(res.Body), "wiki page already exists") {
 		return fmt.Errorf("invalid response: %d %s", res.Status, res.Body)
 	}
 

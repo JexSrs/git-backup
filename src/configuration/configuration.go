@@ -209,7 +209,7 @@ func (c *Configuration) PopulateDefault() {
 			Exclude: utils.Pointer(false),
 			Assets: ConfigRepoAssets{
 				Exclude: utils.Pointer(false),
-				MaxSize: utils.Pointer("1G"),
+				MaxSize: utils.Pointer("1GB"),
 			},
 		},
 	})
@@ -253,9 +253,6 @@ func (c *Configuration) PopulateDefault() {
 		} else {
 			c.Destinations[i].GitTimeout = time.Second * c.Destinations[i].GitTimeout // User is passing seconds
 		}
-
-		c.Sources[i].Config.DefaultFrom(c.Config)
-		c.Sources[i].Filter.DefaultFrom(c.Filter)
 	}
 
 	for i := range c.Groups {
