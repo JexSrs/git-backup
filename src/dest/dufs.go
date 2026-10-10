@@ -139,3 +139,8 @@ func (d *Dufs) UploadFile(buffer *bytes.Buffer, dstPath string) (string, error) 
 
 	return d.URL.JoinPath(d.RootPath).JoinPath(dstPath).String(), nil
 }
+
+// EnsureOwner is a no-op for DUFS: it only stores release assets.
+func (d *Dufs) EnsureOwner(gConfig configuration.ConfigGroup) (bool, error) {
+	return false, nil
+}

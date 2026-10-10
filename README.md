@@ -16,6 +16,7 @@ The following features are available:
 - Mark as archived
 - Fetch subgroup/repository avatar (available only from GitLab sources).
 - Set the original repository url in the CI/CD variables
+- Create the destination owner when it is missing (Gitea only, opt-in via `create_owner`)
 - Include only / Exclude repositories
 - Filters based on
     - Visibility & archived status

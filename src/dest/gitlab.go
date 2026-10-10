@@ -284,7 +284,7 @@ func (g *GitLab) UnprotectBranch(repo *Repository, branch string) error {
 
 func (g *GitLab) AddRemoteToRepo(repo *Repository) error {
 	if repo.LocalRepository == nil {
-		return fmt.Errorf("no local repository found for gitlabProject %d", repo.ID)
+		return fmt.Errorf("no local repository found for project %s", repo.ID)
 	}
 
 	// Create url
@@ -598,4 +598,9 @@ func (g *GitLab) createGroup(parentGroupId int, group sources.SourceRepositoryGr
 	}
 
 	return newGroup.ID, nil
+}
+
+// EnsureOwner is a no-op for GitLab: repositories are placed under the configured gitlab_group_id.
+func (g *GitLab) EnsureOwner(gConfig configuration.ConfigGroup) (bool, error) {
+	return false, nil
 }

@@ -174,6 +174,10 @@ type DestinationID struct {
 type Destination interface {
 	GetIdentification() DestinationID
 
+	// EnsureOwner makes sure the namespace that will own the repositories exists, creating it when the
+	// destination is configured to do so. It reports whether it created the owner.
+	EnsureOwner(gConfig configuration.ConfigGroup) (bool, error)
+
 	RetrieveExistingRepo(gConfig configuration.ConfigGroup, remote sources.SourceRepository) (*Repository, error)
 	ImportRepository(gConfig configuration.ConfigGroup, config configuration.ConfigRepo, remote sources.SourceRepository, source sources.Source) (*Repository, error)
 	LockUntilImport(repo *Repository, ping func(status string)) error

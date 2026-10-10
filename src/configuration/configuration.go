@@ -40,13 +40,14 @@ func (c *Configuration) GetDestination(id string) *ConfigDestination {
 // Destinations configuration
 
 type ConfigDestination struct {
-	ID         string        `json:"id"`
-	URL        string        `json:"url"`
-	Token      string        `json:"token"`
-	Timeout    time.Duration `json:"timeout"`
-	GitTimeout time.Duration `json:"git_timeout"`
-	IgnoreTLS  bool          `json:"ignore_tls"`
-	CACert     string        `json:"ca_cert"` // path to a PEM CA bundle used to verify the destination's TLS cert
+	ID          string        `json:"id"`
+	URL         string        `json:"url"`
+	Token       string        `json:"token"`
+	Timeout     time.Duration `json:"timeout"`
+	GitTimeout  time.Duration `json:"git_timeout"`
+	IgnoreTLS   bool          `json:"ignore_tls"`
+	CACert      string        `json:"ca_cert"`      // path to a PEM CA bundle used to verify the destination's TLS cert
+	CreateOwner bool          `json:"create_owner"` // gitea only: create the group owner (gitea_username) as an organization when it does not exist
 }
 
 func (c ConfigDestination) LoadCABundle() ([]byte, error) {

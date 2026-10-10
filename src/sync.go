@@ -78,6 +78,14 @@ func SyncRepo(
 
 	dstID := gitDst.GetIdentification()
 
+	created, err := gitDst.EnsureOwner(gConfig)
+	if err != nil {
+		return errors.Wrap(err, "failed to ensure repository owner exists")
+	}
+	if created {
+		fmt.Printf("- Owner '%s' did not exist in destination, created it as an organization\n", gConfig.GiteaUsername)
+	}
+
 	fmt.Println("- Checking repository...")
 	repo, err := gitDst.RetrieveExistingRepo(gConfig, remote)
 	if err != nil {

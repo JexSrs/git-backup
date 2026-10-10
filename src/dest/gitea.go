@@ -25,6 +25,8 @@ type Gitea struct {
 
 	client *http.Client
 	config *configuration.ConfigDestination
+
+	knownOwners map[string]bool // owners verified or created during this run
 }
 
 func NewGitea(config configuration.ConfigDestination) *Gitea {
@@ -40,7 +42,8 @@ func NewGitea(config configuration.ConfigDestination) *Gitea {
 				TLSClientConfig: config.TLSConfig(),
 			},
 		},
-		config: &config,
+		config:      &config,
+		knownOwners: map[string]bool{},
 	}
 }
 
@@ -310,7 +313,7 @@ func (g *Gitea) UnprotectBranch(repo *Repository, branch string) error {
 
 func (g *Gitea) AddRemoteToRepo(repo *Repository) error {
 	if repo.LocalRepository == nil {
-		return fmt.Errorf("no local repository found for gitlabProject %d", repo.ID)
+		return fmt.Errorf("no local repository found for project %s", repo.ID)
 	}
 
 	// Create url
@@ -502,4 +505,46 @@ func (g *Gitea) fetchReleaseFromTag(repo *Repository, tagName string) (*giteaRel
 	}
 
 	return &release, nil
+}
+
+// EnsureOwner checks that the group's owner (gitea_username) exists in Gitea. When it does not and the
+// destination has create_owner enabled, it is created as an organization owned by the token's user.
+// It reports whether an owner was created.
+func (g *Gitea) EnsureOwner(gConfig configuration.ConfigGroup) (bool, error) {
+	owner := gConfig.GiteaUsername
+
+	if !g.config.CreateOwner || g.knownOwners[owner] {
+		return false, nil
+	}
+
+	res, err := g.request(http.MethodGet, fmt.Sprintf("/api/v1/users/%s", url.PathEscape(owner)), nil, "")
+	if err != nil {
+		return false, fmt.Errorf("creating request: %w", err)
+	}
+
+	if res.Status == http.StatusOK {
+		g.knownOwners[owner] = true
+		return false, nil
+	}
+
+	if res.Status != http.StatusNotFound {
+		return false, fmt.Errorf("invalid response: %d %s", res.Status, res.Body)
+	}
+
+	data, _ := json.Marshal(map[string]any{
+		"username":   owner,
+		"visibility": "public",
+	})
+
+	res, err = g.request(http.MethodPost, "/api/v1/orgs", bytes.NewBuffer(data), "application/json")
+	if err != nil {
+		return false, fmt.Errorf("creating request: %w", err)
+	}
+
+	if res.Status != http.StatusCreated {
+		return false, fmt.Errorf("invalid response: %d %s", res.Status, res.Body)
+	}
+
+	g.knownOwners[owner] = true
+	return true, nil
 }
