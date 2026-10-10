@@ -7,6 +7,7 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	ico "github.com/biessek/golang-ico"
@@ -19,7 +20,7 @@ func TestOpenConfigFile_ReadsConfigFromWorkingDirectory(t *testing.T) {
 	}
 	t.Chdir(dir)
 
-	content, err := OpenConfigFile()
+	content, err := OpenConfigFile("")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -38,7 +39,7 @@ func TestOpenConfigFile_PrefersConfigJsonOverJsonc(t *testing.T) {
 	}
 	t.Chdir(dir)
 
-	content, err := OpenConfigFile()
+	content, err := OpenConfigFile("")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -50,8 +51,47 @@ func TestOpenConfigFile_PrefersConfigJsonOverJsonc(t *testing.T) {
 func TestOpenConfigFile_ErrorsWhenNoConfigExists(t *testing.T) {
 	t.Chdir(t.TempDir())
 
-	if _, err := OpenConfigFile(); err == nil {
+	if _, err := OpenConfigFile(""); err == nil {
 		t.Fatal("expected an error when no configuration file exists")
+	}
+}
+
+func TestOpenConfigFile_ExplicitPathReadsThatFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "custom.jsonc")
+	if err := os.WriteFile(path, []byte(`{"explicit": true}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	content, err := OpenConfigFile(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if string(content) != `{"explicit": true}` {
+		t.Fatalf("unexpected content: %q", content)
+	}
+}
+
+func TestOpenConfigFile_ExplicitMissingPathErrorsWithPath(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "missing.jsonc")
+
+	_, err := OpenConfigFile(path)
+	if err == nil {
+		t.Fatal("expected an error for a missing explicit path")
+	}
+	if !strings.Contains(err.Error(), path) {
+		t.Fatalf("error %q should mention the path %q", err, path)
+	}
+}
+
+func TestOpenConfigFile_ExplicitMissingPathDoesNotFallBackToDiscovery(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "config.jsonc"), []byte(`{"groups": []}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(dir)
+
+	if _, err := OpenConfigFile(filepath.Join(dir, "missing.jsonc")); err == nil {
+		t.Fatal("expected an error: an explicit path must not fall back to config.jsonc in the working directory")
 	}
 }
 

@@ -1,16 +1,23 @@
 package main
 
 import (
-	"github.com/muhammadmuzzammil1998/jsonc"
+	"flag"
 	"log"
 	"main/src/configuration"
 	"main/src/dest"
 	"main/src/sources"
 	"main/src/utils"
+
+	"github.com/muhammadmuzzammil1998/jsonc"
 )
 
 func main() {
-	file, err := utils.OpenConfigFile()
+	var configPath string
+	flag.StringVar(&configPath, "c", "", "path to the configuration file (shorthand for --config)")
+	flag.StringVar(&configPath, "config", "", "path to the configuration file; defaults to config.json(c) or configuration.json(c) in the working directory")
+	flag.Parse()
+
+	file, err := utils.OpenConfigFile(configPath)
 	if err != nil {
 		log.Fatal("Could not open configuration file:", err)
 	}

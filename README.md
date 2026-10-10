@@ -72,13 +72,26 @@ This tool supports synchronization with the following sources:
 
 Populate the `config.json` file (`jsonc` is also supported), see [config.example.jsonc](./config.example.jsonc).
 
-Build and run locally with `make` (the binary reads `config.jsonc` from the working directory, so run it from the repo root):
+Build and run locally with `make` (by default the binary reads `config.jsonc` from the working directory, so run it from the repo root):
 
 ```shell
 make build   # compile to ./bin/git-backup
 make run     # build and run
 make help    # list all targets
 ```
+
+To use a configuration file from another location, pass `-c` or `--config`. This also lets you run several
+instances side by side, each with its own configuration:
+
+```shell
+./bin/git-backup --config /path/to/other-config.jsonc
+./bin/git-backup -c ./configs/work.jsonc
+make run ARGS="-c ./configs/work.jsonc"
+```
+
+When `--config` is given, only that file is read; if it does not exist the program exits with an error.
+Without it, the binary looks in the working directory for `config.json`, `configuration.json`, `config.jsonc`
+or `configuration.jsonc`, in that order.
 
 Or use the `docker compose` command to create and start the container.
 

@@ -13,9 +13,9 @@ build:
 	@mkdir -p $(BIN_DIR)
 	go build -o $(BIN_DIR)/$(BINARY) $(PKG)
 
-## run: build, then run from the repo root (so config.jsonc is found)
+## run: build, then run from the repo root (so config.jsonc is found); pass flags via ARGS="-c other.jsonc"
 run: build
-	./$(BIN_DIR)/$(BINARY)
+	./$(BIN_DIR)/$(BINARY) $(ARGS)
 
 ## dev: run straight from source without producing a binary
 dev:
