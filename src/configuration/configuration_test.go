@@ -400,9 +400,18 @@ func fullFilter(tag string) ConfigFilter {
 		CreatedAt:      ConfigFilterMinMax[string]{Min: strPtr("cmin-" + tag), Max: strPtr("cmax-" + tag)},
 		Updated:        ConfigFilterMinMax[string]{Min: strPtr("umin-" + tag), Max: strPtr("umax-" + tag)},
 		Size:           ConfigFilterMinMax[int]{Min: intPtr(n), Max: intPtr(n * 10)},
+		Releases:       ConfigFilterMinMax[int]{Min: intPtr(n), Max: intPtr(n * 10)},
+		Commits:        ConfigFilterMinMax[int]{Min: intPtr(n), Max: intPtr(n * 10)},
 		Issues: ConfigFilterIssues{
 			Enabled: boolPtr(tag == "a"),
+			All:     ConfigFilterMinMax[int]{Min: intPtr(n), Max: intPtr(n * 10)},
 			Open:    ConfigFilterMinMax[int]{Min: intPtr(n), Max: intPtr(n * 10)},
+			Closed:  ConfigFilterMinMax[int]{Min: intPtr(n), Max: intPtr(n * 10)},
+		},
+		PullRequests: ConfigFilterPullRequests{
+			All:    ConfigFilterMinMax[int]{Min: intPtr(n), Max: intPtr(n * 10)},
+			Open:   ConfigFilterMinMax[int]{Min: intPtr(n), Max: intPtr(n * 10)},
+			Closed: ConfigFilterMinMax[int]{Min: intPtr(n), Max: intPtr(n * 10)},
 		},
 	}
 }

@@ -125,6 +125,10 @@ func (g *HuggingFace) FetchReleases(username string, repo SourceRepository) ([]S
 	return nil, nil
 }
 
+func (g *HuggingFace) FetchStats(_ string, repo SourceRepository, _ StatsNeeds) (RepositoryStats, error) {
+	return repo.Stats, fmt.Errorf("%w: HuggingFace repositories have no issues, pull requests or releases to count", ErrStatsUnavailable)
+}
+
 func (g *HuggingFace) AddTokenToCloneUrl(url string) string {
 	// TODO
 	return url

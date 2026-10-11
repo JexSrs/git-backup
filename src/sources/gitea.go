@@ -34,6 +34,10 @@ type GiteaRepository struct {
 	Archived bool `json:"archived"`
 	Empty    bool `json:"empty"`
 	Fork     bool `json:"fork"`
+
+	OpenIssues *int `json:"open_issues_count"`
+	OpenPRs    *int `json:"open_pr_counter"`
+	Releases   *int `json:"release_counter"`
 }
 
 type GiteaRelease struct {
@@ -83,7 +87,7 @@ func (g *Gitea) Paginate(username string, groupCfg configuration.ConfigGroup, pr
 	}
 
 	for _, kind := range kinds {
-		status, body, err := g.get([]string{"api", "v1", kind, username, "repos"}, url.Values{
+		status, body, _, err := g.get([]string{"api", "v1", kind, username, "repos"}, url.Values{
 			"page":  {fmt.Sprint(prev.NextPage)},
 			"limit": {fmt.Sprint(giteaPageSize)},
 		})
@@ -113,6 +117,11 @@ func (g *Gitea) Paginate(username string, groupCfg configuration.ConfigGroup, pr
 				Archived:    repo.Archived,
 				Empty:       repo.Empty,
 				Forked:      repo.Fork,
+				Stats: RepositoryStats{
+					Releases:     repo.Releases,
+					Issues:       StateCounts{Open: repo.OpenIssues},
+					PullRequests: StateCounts{Open: repo.OpenPRs},
+				},
 			}
 		}
 
@@ -136,7 +145,7 @@ func (g *Gitea) GetWikiURL(username, repoName string) string {
 }
 
 func (g *Gitea) FetchReleases(username string, repo SourceRepository) ([]SourceRelease, error) {
-	status, body, err := g.get([]string{"api", "v1", "repos", username, repo.Name, "releases"}, url.Values{
+	status, body, _, err := g.get([]string{"api", "v1", "repos", username, repo.Name, "releases"}, url.Values{
 		"page":  {"1"},
 		"limit": {fmt.Sprint(giteaPageSize)},
 	})
@@ -178,6 +187,69 @@ func (g *Gitea) FetchReleases(username string, repo SourceRepository) ([]SourceR
 	return utils.Reverse(releases), nil
 }
 
+// FetchStats completes the counters the listing provides (releases, open issues, open pull requests)
+// with one tiny listing per missing count, read from the X-Total-Count header.
+func (g *Gitea) FetchStats(username string, repo SourceRepository, needs StatsNeeds) (RepositoryStats, error) {
+	stats := repo.Stats
+	repoPath := []string{"api", "v1", "repos", username, repo.Name}
+
+	count := func(segment string, query url.Values) (*int, error) {
+		query.Set("limit", "1")
+		status, _, header, err := g.get(append(repoPath, segment), query)
+		if err != nil {
+			return nil, err
+		}
+		if status == http.StatusConflict {
+			return utils.Pointer(0), nil // an empty repository has no commits
+		}
+		if status != http.StatusOK {
+			return nil, fmt.Errorf("failed to count %s: received status code %d", segment, status)
+		}
+		return headerCount(header, "X-Total-Count"), nil
+	}
+
+	// Issues and pull requests share the issues endpoint, told apart by type.
+	fill := func(counts *StateCounts, need StateNeeds, kind string) error {
+		var err error
+		if (need.Open || need.All) && counts.Open == nil {
+			if counts.Open, err = count("issues", url.Values{"type": {kind}, "state": {"open"}}); err != nil {
+				return err
+			}
+		}
+		if (need.Closed || need.All) && counts.Closed == nil {
+			if counts.Closed, err = count("issues", url.Values{"type": {kind}, "state": {"closed"}}); err != nil {
+				return err
+			}
+		}
+		if need.All && counts.All == nil && counts.Open != nil && counts.Closed != nil {
+			counts.All = utils.Pointer(*counts.Open + *counts.Closed)
+		}
+		return nil
+	}
+
+	if err := fill(&stats.Issues, needs.Issues, "issues"); err != nil {
+		return stats, err
+	}
+	if err := fill(&stats.PullRequests, needs.PullRequests, "pulls"); err != nil {
+		return stats, err
+	}
+
+	var err error
+	if needs.Releases && stats.Releases == nil {
+		if stats.Releases, err = count("releases", url.Values{}); err != nil {
+			return stats, err
+		}
+	}
+	if needs.Commits && stats.Commits == nil {
+		query := url.Values{"stat": {"false"}, "verification": {"false"}, "files": {"false"}}
+		if stats.Commits, err = count("commits", query); err != nil {
+			return stats, err
+		}
+	}
+
+	return stats, nil
+}
+
 // AddTokenToCloneUrl embeds the token as the basic-auth username, which Gitea and Forgejo accept.
 func (g *Gitea) AddTokenToCloneUrl(u string) string {
 	if g.Token == "" {
@@ -196,14 +268,14 @@ func (g *Gitea) FetchUsernamePassword() (string, string) {
 	return g.Token, ""
 }
 
-// get performs a GET against the instance with the token header and returns the status and body.
-func (g *Gitea) get(segments []string, query url.Values) (int, []byte, error) {
+// get performs a GET against the instance with the token header and returns the status, body and headers.
+func (g *Gitea) get(segments []string, query url.Values) (int, []byte, http.Header, error) {
 	u := g.URL.JoinPath(segments...)
 	u.RawQuery = query.Encode()
 
 	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
 	if err != nil {
-		return 0, nil, fmt.Errorf("error creating request: %v", err)
+		return 0, nil, nil, fmt.Errorf("error creating request: %v", err)
 	}
 	if g.Token != "" {
 		req.Header.Set("Authorization", "token "+g.Token)
@@ -211,16 +283,16 @@ func (g *Gitea) get(segments []string, query url.Values) (int, []byte, error) {
 
 	resp, err := g.client.Do(req)
 	if err != nil {
-		return 0, nil, fmt.Errorf("error making request: %v", err)
+		return 0, nil, nil, fmt.Errorf("error making request: %v", err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return 0, nil, fmt.Errorf("error reading response body: %v", err)
+		return 0, nil, nil, fmt.Errorf("error reading response body: %v", err)
 	}
 
-	return resp.StatusCode, body, nil
+	return resp.StatusCode, body, resp.Header, nil
 }
 
 // optionalString maps the API's empty strings to nil, like the other sources report missing values.

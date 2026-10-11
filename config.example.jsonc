@@ -79,11 +79,48 @@
             "min": 0,
             "max": null
         },
+        // The count filters below need one or two extra API calls per repository, made only when a bound can
+        // actually exclude something (a min above 0 or a max). A count a source cannot provide never excludes:
+        // GitHub needs "auth.token" (GraphQL), GitLab needs Reporter access for "commits", HuggingFace and plain
+        // git sources provide none of them.
+        // Fetch repositories with a specific number of releases
+        "releases": {
+            "min": 0,
+            "max": null
+        },
+        // Fetch repositories with a specific number of commits on the default branch
+        "commits": {
+            "min": 0,
+            "max": null
+        },
         "issues": {
             // Fetch repositories that have their issues enabled (true) or disabled (false)
             "enabled": true,
-            // Fetch repositories with a specific number of open issues
+            // Fetch repositories with a specific number of issues: all, open or closed
+            "all": {
+                "min": 0,
+                "max": null
+            },
             "open": {
+                "min": 0,
+                "max": null
+            },
+            "closed": {
+                "min": 0,
+                "max": null
+            }
+        },
+        // Fetch repositories with a specific number of pull/merge requests: all, open or closed (closed includes merged)
+        "pull_requests": {
+            "all": {
+                "min": 0,
+                "max": null
+            },
+            "open": {
+                "min": 0,
+                "max": null
+            },
+            "closed": {
                 "min": 0,
                 "max": null
             }

@@ -149,7 +149,10 @@ type ConfigFilter struct {
 	CreatedAt      ConfigFilterMinMax[string] `json:"created"`
 	Updated        ConfigFilterMinMax[string] `json:"updated"`
 	Size           ConfigFilterMinMax[int]    `json:"size"`
+	Releases       ConfigFilterMinMax[int]    `json:"releases"`
+	Commits        ConfigFilterMinMax[int]    `json:"commits"` // commits on the default branch
 	Issues         ConfigFilterIssues         `json:"issues"`
+	PullRequests   ConfigFilterPullRequests   `json:"pull_requests"`
 }
 
 type ConfigFilterMinMax[T any] struct {
@@ -157,9 +160,28 @@ type ConfigFilterMinMax[T any] struct {
 	Max *T `json:"max"`
 }
 
+// DefaultFrom fills the unset bounds from another range.
+func (m *ConfigFilterMinMax[T]) DefaultFrom(from ConfigFilterMinMax[T]) {
+	if m.Min == nil {
+		m.Min = from.Min
+	}
+	if m.Max == nil {
+		m.Max = from.Max
+	}
+}
+
 type ConfigFilterIssues struct {
 	Enabled *bool                   `json:"enabled"`
+	All     ConfigFilterMinMax[int] `json:"all"`
 	Open    ConfigFilterMinMax[int] `json:"open"`
+	Closed  ConfigFilterMinMax[int] `json:"closed"`
+}
+
+// ConfigFilterPullRequests bounds the number of pull/merge requests; "closed" includes merged ones.
+type ConfigFilterPullRequests struct {
+	All    ConfigFilterMinMax[int] `json:"all"`
+	Open   ConfigFilterMinMax[int] `json:"open"`
+	Closed ConfigFilterMinMax[int] `json:"closed"`
 }
 
 // Repositories configuration
@@ -449,13 +471,14 @@ func (c *ConfigFilter) DefaultFrom(from ConfigFilter) {
 		c.Issues.Enabled = from.Issues.Enabled
 	}
 
-	if c.Issues.Open.Min == nil {
-		c.Issues.Open.Min = from.Issues.Open.Min
-	}
-
-	if c.Issues.Open.Max == nil {
-		c.Issues.Open.Max = from.Issues.Open.Max
-	}
+	c.Issues.All.DefaultFrom(from.Issues.All)
+	c.Issues.Open.DefaultFrom(from.Issues.Open)
+	c.Issues.Closed.DefaultFrom(from.Issues.Closed)
+	c.PullRequests.All.DefaultFrom(from.PullRequests.All)
+	c.PullRequests.Open.DefaultFrom(from.PullRequests.Open)
+	c.PullRequests.Closed.DefaultFrom(from.PullRequests.Closed)
+	c.Releases.DefaultFrom(from.Releases)
+	c.Commits.DefaultFrom(from.Commits)
 }
 
 func (c *Configuration) Validate() error {

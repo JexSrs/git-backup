@@ -1,6 +1,7 @@
 package sources
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -176,6 +177,113 @@ func (g *Github) FetchReleases(username string, repo SourceRepository) ([]Source
 	}
 
 	return utils.Reverse(releases), nil
+}
+
+// githubStatsQuery reads every count the filters can ask for in one request. GitHub's REST API no
+// longer reports issue totals (its issue listing is cursor paginated), so GraphQL is the only exact source.
+const githubStatsQuery = `query($owner: String!, $name: String!) {
+  repository(owner: $owner, name: $name) {
+    releases { totalCount }
+    defaultBranchRef { target { ... on Commit { history { totalCount } } } }
+    issuesAll: issues { totalCount }
+    issuesOpen: issues(states: [OPEN]) { totalCount }
+    issuesClosed: issues(states: [CLOSED]) { totalCount }
+    prsAll: pullRequests { totalCount }
+    prsOpen: pullRequests(states: [OPEN]) { totalCount }
+    prsClosed: pullRequests(states: [CLOSED, MERGED]) { totalCount }
+  }
+}`
+
+type githubCount struct {
+	TotalCount int `json:"totalCount"`
+}
+
+type githubStatsResponse struct {
+	Data struct {
+		Repository *struct {
+			Releases         githubCount `json:"releases"`
+			DefaultBranchRef *struct {
+				Target struct {
+					History githubCount `json:"history"`
+				} `json:"target"`
+			} `json:"defaultBranchRef"`
+			IssuesAll    githubCount `json:"issuesAll"`
+			IssuesOpen   githubCount `json:"issuesOpen"`
+			IssuesClosed githubCount `json:"issuesClosed"`
+			PrsAll       githubCount `json:"prsAll"`
+			PrsOpen      githubCount `json:"prsOpen"`
+			PrsClosed    githubCount `json:"prsClosed"`
+		} `json:"repository"`
+	} `json:"data"`
+	Errors []struct {
+		Message string `json:"message"`
+	} `json:"errors"`
+}
+
+// FetchStats fills every count with a single GraphQL query, which needs a token.
+func (g *Github) FetchStats(username string, repo SourceRepository, needs StatsNeeds) (RepositoryStats, error) {
+	stats := repo.Stats
+	if !needs.Any() {
+		return stats, nil
+	}
+	if len(g.Token) == 0 {
+		return stats, fmt.Errorf("%w: GitHub needs auth.token to read repository statistics", ErrStatsUnavailable)
+	}
+
+	payload, err := json.Marshal(map[string]any{
+		"query":     githubStatsQuery,
+		"variables": map[string]string{"owner": username, "name": repo.Name},
+	})
+	if err != nil {
+		return stats, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, "https://api.github.com/graphql", bytes.NewReader(payload))
+	if err != nil {
+		return stats, fmt.Errorf("error creating request: %v", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+g.Token)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := g.client.Do(req)
+	if err != nil {
+		return stats, fmt.Errorf("error making request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return stats, fmt.Errorf("failed to fetch repository statistics: received status code %d", resp.StatusCode)
+	}
+
+	var res githubStatsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+		return stats, err
+	}
+	if len(res.Errors) > 0 {
+		return stats, fmt.Errorf("failed to fetch repository statistics: %s", res.Errors[0].Message)
+	}
+	if res.Data.Repository == nil {
+		return stats, fmt.Errorf("failed to fetch repository statistics: repository %s/%s not found", username, repo.Name)
+	}
+
+	r := res.Data.Repository
+	commits := 0
+	if r.DefaultBranchRef != nil {
+		commits = r.DefaultBranchRef.Target.History.TotalCount
+	}
+	stats.Releases = utils.Pointer(r.Releases.TotalCount)
+	stats.Commits = utils.Pointer(commits)
+	stats.Issues = StateCounts{
+		All:    utils.Pointer(r.IssuesAll.TotalCount),
+		Open:   utils.Pointer(r.IssuesOpen.TotalCount),
+		Closed: utils.Pointer(r.IssuesClosed.TotalCount),
+	}
+	stats.PullRequests = StateCounts{
+		All:    utils.Pointer(r.PrsAll.TotalCount),
+		Open:   utils.Pointer(r.PrsOpen.TotalCount),
+		Closed: utils.Pointer(r.PrsClosed.TotalCount),
+	}
+	return stats, nil
 }
 
 func (g *Github) AddTokenToCloneUrl(u string) string {

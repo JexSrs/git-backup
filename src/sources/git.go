@@ -1,6 +1,7 @@
 package sources
 
 import (
+	"fmt"
 	"main/src/configuration"
 	"main/src/utils"
 	"net/url"
@@ -52,6 +53,10 @@ func (g *Git) GetWikiURL(username, repoName string) string {
 
 func (g *Git) FetchReleases(username string, repo SourceRepository) ([]SourceRelease, error) {
 	return make([]SourceRelease, 0), nil
+}
+
+func (g *Git) FetchStats(_ string, repo SourceRepository, _ StatsNeeds) (RepositoryStats, error) {
+	return repo.Stats, fmt.Errorf("%w: plain git sources have no API to count issues, pull requests or releases", ErrStatsUnavailable)
 }
 
 func (g *Git) AddTokenToCloneUrl(u string) string {

@@ -30,6 +30,7 @@ The following features are available:
     - If it is forked
     - Min/max checks on `stars`, `watchers`, `forks`, `branches`, `tags`, `size` and `open issues`
     - Min/max checks on `creation` and `last updated` dates
+    - Min/max checks on `releases`, `commits`, `issues` (all, open, closed) and `pull_requests` (all, open, closed)
 
 **Supported Platforms**
 This tool supports synchronization with the following sources:
@@ -69,7 +70,12 @@ This tool supports synchronization with the following sources:
 | Branches               | ✅      | ✅      | ✅           | ✅                 |
 | Tags check             | ✅      | ✅      | ✅           | ✅                 |
 | Size check             | ✅      |        |             |                   |
-| Open issues check      | ✅      |        |             |                   |
+| Open issues check      | ✅      | ✅      |             | ✅                 |
+| Issues count check     | ✅      | ✅      |             | ✅                 |
+| Closed issues check    | ✅      | ✅      |             | ✅                 |
+| Pull requests count    | ✅      | ✅      |             | ✅                 |
+| Releases count check   | ✅      | ✅      |             | ✅                 |
+| Commits count check    | ✅      | ✅      |             | ✅                 |
 | Creation date check    | ✅      |        |             |                   |
 | Last update date check | ✅      |        |             |                   |
 
@@ -104,6 +110,23 @@ Sources whose `id` starts with `gitea` talk to any Gitea or Forgejo instance (se
 need a `base_url`. Sources whose `id` starts with `lavaforge` use the same implementation with `base_url` defaulting to
 `https://lavaforge.org`. In both cases `auth.token` is an access token of the instance and is required to see private
 repositories; the group's `username` may be either a user or an organisation.
+
+### Count filters
+
+`releases`, `commits`, `issues.all` / `issues.open` / `issues.closed` and `pull_requests.all` / `open` / `closed` bound
+how many of each a repository may have (inclusive). None of the platforms can filter on these server-side, so they
+are evaluated locally from one or two extra API calls per repository, made only when a bound can actually exclude
+something (a `min` above 0 or a `max`). A count a source cannot provide never excludes a repository, so a filter that
+one source supports and another does not is simply not applied to the latter.
+
+| Source           | Notes                                                                                          |
+|------------------|------------------------------------------------------------------------------------------------|
+| GitHub           | One GraphQL query per repository; requires `auth.token`. Without it the counts stay unknown.   |
+| GitLab           | Issue statistics and the `X-Total` header of merge requests and releases; `commits` needs Reporter access. |
+| Gitea / Forgejo  | Open issues, open pull requests and releases come with the listing; the rest is one call each. |
+| HuggingFace, git | Not available.                                                                                 |
+
+"Closed" pull requests include merged ones; `commits` counts the default branch.
 
 ### Retries
 
@@ -143,13 +166,5 @@ fixes.
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## TODO
-- Enhance filters
-    - releases (min, max)
-    - all issues (min, max)
-    - closed issues (min, max)
-    - all pull_requests (min, max)
-    - open pull_requests (min, max)
-    - closed pull_requests (min, max)
-    - commits (min, max)
 - Update avatar's on groups (GitLab)
 - Change subgroup if changed from source (GitLab)

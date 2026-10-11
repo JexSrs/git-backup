@@ -32,6 +32,8 @@ func SyncUser(dst map[string]dest.Destination, groupCfg configuration.ConfigGrou
 	fmt.Println("================================================================")
 
 	count := 1
+	needs := statsNeeded(groupCfg.Filter)
+	statsUnavailableReported := false
 
 	paginate := func(prev *sources.PaginationResponse) (*sources.PaginationResponse, error) {
 		var page *sources.PaginationResponse
@@ -74,6 +76,27 @@ func SyncUser(dst map[string]dest.Destination, groupCfg configuration.ConfigGrou
 			if skipFromFilter(remote, groupCfg.Filter) {
 				fmt.Printf("Skipping repository %s: from --filter\n", remote.Name)
 				continue
+			}
+
+			// Count filters need per-repository lookups, so they run only after the cheap filters passed.
+			if needs.Any() {
+				stats, err := source.FetchStats(groupCfg.Username, remote, needs)
+				remote.Stats = stats
+				if err != nil {
+					if errors.Is(err, sources.ErrStatsUnavailable) {
+						if !statsUnavailableReported {
+							fmt.Printf("Count filters are not applied to this group: %v\n", err)
+							statsUnavailableReported = true
+						}
+					} else {
+						fmt.Printf("Could not read the statistics of repository %s, count filters not applied to it: %v\n", remote.Name, err)
+					}
+				}
+
+				if reason := statsFilterReason(remote.Stats, groupCfg.Filter); reason != "" {
+					fmt.Printf("Skipping repository %s: from --filter (%s)\n", remote.Name, reason)
+					continue
+				}
 			}
 
 			fmt.Printf("\n%d. Evaluating repository %s\n", count, remote.Name)
@@ -401,6 +424,62 @@ func printRefDifferences(differences []dest.RefDifference) {
 		}
 		fmt.Println("    -", difference)
 	}
+}
+
+// statsNeeded derives which repository statistics the count filters require. A bound that cannot
+// exclude anything (min of zero or less and no max) needs nothing, so the default config costs no lookups.
+func statsNeeded(filter configuration.ConfigFilter) sources.StatsNeeds {
+	return sources.StatsNeeds{
+		Releases: boundsCanExclude(filter.Releases),
+		Commits:  boundsCanExclude(filter.Commits),
+		Issues: sources.StateNeeds{
+			All:    boundsCanExclude(filter.Issues.All),
+			Open:   boundsCanExclude(filter.Issues.Open),
+			Closed: boundsCanExclude(filter.Issues.Closed),
+		},
+		PullRequests: sources.StateNeeds{
+			All:    boundsCanExclude(filter.PullRequests.All),
+			Open:   boundsCanExclude(filter.PullRequests.Open),
+			Closed: boundsCanExclude(filter.PullRequests.Closed),
+		},
+	}
+}
+
+func boundsCanExclude(bounds configuration.ConfigFilterMinMax[int]) bool {
+	return (bounds.Min != nil && *bounds.Min > 0) || bounds.Max != nil
+}
+
+// statsFilterReason explains why the count filters exclude the repository, or returns "" when they do
+// not. Bounds are inclusive. Unknown counts never exclude: a source that cannot provide a statistic is
+// simply not filtered on it.
+func statsFilterReason(stats sources.RepositoryStats, filter configuration.ConfigFilter) string {
+	checks := []struct {
+		name   string
+		value  *int
+		bounds configuration.ConfigFilterMinMax[int]
+	}{
+		{"releases", stats.Releases, filter.Releases},
+		{"commits", stats.Commits, filter.Commits},
+		{"issues", stats.Issues.All, filter.Issues.All},
+		{"open issues", stats.Issues.Open, filter.Issues.Open},
+		{"closed issues", stats.Issues.Closed, filter.Issues.Closed},
+		{"pull requests", stats.PullRequests.All, filter.PullRequests.All},
+		{"open pull requests", stats.PullRequests.Open, filter.PullRequests.Open},
+		{"closed pull requests", stats.PullRequests.Closed, filter.PullRequests.Closed},
+	}
+
+	for _, check := range checks {
+		if check.value == nil {
+			continue
+		}
+		if check.bounds.Min != nil && *check.value < *check.bounds.Min {
+			return fmt.Sprintf("%s %d below min %d", check.name, *check.value, *check.bounds.Min)
+		}
+		if check.bounds.Max != nil && *check.value > *check.bounds.Max {
+			return fmt.Sprintf("%s %d above max %d", check.name, *check.value, *check.bounds.Max)
+		}
+	}
+	return ""
 }
 
 func skipFromFilter(remote sources.SourceRepository, filter configuration.ConfigFilter) bool {

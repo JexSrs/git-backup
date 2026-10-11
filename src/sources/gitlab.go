@@ -3,6 +3,7 @@ package sources
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"main/src/configuration"
 	"main/src/utils"
 	"net/http"
@@ -34,6 +35,7 @@ type GitlabRepository struct {
 	Visibility  string  `json:"visibility"`
 	Archived    bool    `json:"archived"`
 	IsEmpty     bool    `json:"empty_repo"`
+	OpenIssues  *int    `json:"open_issues_count"`
 }
 
 type GitlabRelease struct {
@@ -224,6 +226,7 @@ func (g *Gitlab) fetchRepositories(parentGroup *GitlabGroup, pageNumber int) ([]
 			Private:     repo.Visibility == "private",
 			Archived:    repo.Archived,
 			Empty:       repo.IsEmpty,
+			Stats:       RepositoryStats{Issues: StateCounts{Open: repo.OpenIssues}},
 		}
 	}
 
@@ -388,6 +391,124 @@ func (g *Gitlab) FetchReleases(username string, repo SourceRepository) ([]Source
 	}
 
 	return utils.Reverse(releases), nil
+}
+
+// FetchStats completes the counts from the project's issue statistics, the X-Total header of the
+// merge request and release listings, and the project statistics (commit_count needs Reporter access).
+func (g *Gitlab) FetchStats(username string, repo SourceRepository, needs StatsNeeds) (RepositoryStats, error) {
+	stats := repo.Stats
+	project := fmt.Sprintf("api/v4/projects/%d", repo.ID)
+
+	if needs.Issues.Any() && (stats.Issues.All == nil || stats.Issues.Open == nil || stats.Issues.Closed == nil) {
+		body, _, err := g.getOK(project+"/issues_statistics", nil)
+		if err != nil {
+			return stats, err
+		}
+		var res struct {
+			Statistics struct {
+				Counts struct {
+					All    int `json:"all"`
+					Closed int `json:"closed"`
+					Opened int `json:"opened"`
+				} `json:"counts"`
+			} `json:"statistics"`
+		}
+		if err := json.Unmarshal(body, &res); err != nil {
+			return stats, err
+		}
+		stats.Issues = StateCounts{
+			All:    utils.Pointer(res.Statistics.Counts.All),
+			Open:   utils.Pointer(res.Statistics.Counts.Opened),
+			Closed: utils.Pointer(res.Statistics.Counts.Closed),
+		}
+	}
+
+	if needs.PullRequests.Any() {
+		var err error
+		if (needs.PullRequests.All || needs.PullRequests.Closed) && stats.PullRequests.All == nil {
+			if stats.PullRequests.All, err = g.headerTotal(project+"/merge_requests", url.Values{"state": {"all"}}); err != nil {
+				return stats, err
+			}
+		}
+		if (needs.PullRequests.Open || needs.PullRequests.Closed) && stats.PullRequests.Open == nil {
+			if stats.PullRequests.Open, err = g.headerTotal(project+"/merge_requests", url.Values{"state": {"opened"}}); err != nil {
+				return stats, err
+			}
+		}
+		if stats.PullRequests.Closed == nil && stats.PullRequests.All != nil && stats.PullRequests.Open != nil {
+			stats.PullRequests.Closed = utils.Pointer(*stats.PullRequests.All - *stats.PullRequests.Open)
+		}
+	}
+
+	if needs.Releases && stats.Releases == nil {
+		var err error
+		if stats.Releases, err = g.headerTotal(project+"/releases", url.Values{}); err != nil {
+			return stats, err
+		}
+	}
+
+	if needs.Commits && stats.Commits == nil {
+		body, _, err := g.getOK(project, url.Values{"statistics": {"true"}})
+		if err != nil {
+			return stats, err
+		}
+		var res struct {
+			Statistics *struct {
+				CommitCount int `json:"commit_count"`
+			} `json:"statistics"`
+		}
+		if err := json.Unmarshal(body, &res); err != nil {
+			return stats, err
+		}
+		if res.Statistics != nil {
+			stats.Commits = utils.Pointer(res.Statistics.CommitCount)
+		}
+	}
+
+	return stats, nil
+}
+
+// headerTotal lists one item of a collection and reads the total from the X-Total header; GitLab omits
+// the header for very large collections, which yields nil (unknown).
+func (g *Gitlab) headerTotal(path string, query url.Values) (*int, error) {
+	query.Set("per_page", "1")
+	_, header, err := g.getOK(path, query)
+	if err != nil {
+		return nil, err
+	}
+	return headerCount(header, "X-Total"), nil
+}
+
+// getOK performs an authenticated GET that must succeed and returns the body and headers.
+func (g *Gitlab) getOK(path string, query url.Values) ([]byte, http.Header, error) {
+	u := g.URL.JoinPath(path)
+	if query != nil {
+		u.RawQuery = query.Encode()
+	}
+
+	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(g.Token) > 0 {
+		req.Header.Set("Private-Token", g.Token)
+	}
+
+	resp, err := g.client.Do(req)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, nil, fmt.Errorf("failed to fetch %s: %s", path, resp.Status)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, nil, err
+	}
+	return body, resp.Header, nil
 }
 
 func (g *Gitlab) AddTokenToCloneUrl(u string) string {

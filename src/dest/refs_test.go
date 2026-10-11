@@ -27,6 +27,9 @@ func (refsSource) FetchReleases(string, sources.SourceRepository) ([]sources.Sou
 }
 func (refsSource) AddTokenToCloneUrl(u string) string      { return u }
 func (refsSource) FetchUsernamePassword() (string, string) { return "", "" }
+func (refsSource) FetchStats(_ string, r sources.SourceRepository, _ sources.StatsNeeds) (sources.RepositoryStats, error) {
+	return r.Stats, nil
+}
 
 // h derives a distinct, valid hash from any short label.
 func h(s string) plumbing.Hash { return plumbing.ComputeHash(plumbing.BlobObject, []byte(s)) }

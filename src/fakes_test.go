@@ -22,6 +22,10 @@ type fakeSource struct {
 	releases      map[string][]sources.SourceRelease
 	releasesErr   error
 	wikiURLs      map[string]string // repository name → wiki clone url
+
+	stats      map[string]sources.RepositoryStats // repository name → statistics FetchStats returns
+	statsErr   error                              // returned by FetchStats when set
+	statsCalls []string                           // repository names FetchStats was asked about
 }
 
 func (f *fakeSource) Paginate(_ string, _ configuration.ConfigGroup, prev *sources.PaginationResponse) (*sources.PaginationResponse, error) {
@@ -53,6 +57,17 @@ func (f *fakeSource) FetchReleases(_ string, repo sources.SourceRepository) ([]s
 		return nil, f.releasesErr
 	}
 	return f.releases[repo.Name], nil
+}
+
+func (f *fakeSource) FetchStats(_ string, repo sources.SourceRepository, _ sources.StatsNeeds) (sources.RepositoryStats, error) {
+	f.statsCalls = append(f.statsCalls, repo.Name)
+	if f.statsErr != nil {
+		return repo.Stats, f.statsErr
+	}
+	if stats, ok := f.stats[repo.Name]; ok {
+		return stats, nil
+	}
+	return repo.Stats, nil
 }
 
 func (f *fakeSource) AddTokenToCloneUrl(u string) string { return u }

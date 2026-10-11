@@ -103,6 +103,10 @@ type stubSource struct {
 	wikiCalls [][2]string
 }
 
+func (s *stubSource) FetchStats(_ string, repo sources.SourceRepository, _ sources.StatsNeeds) (sources.RepositoryStats, error) {
+	return repo.Stats, nil
+}
+
 func (s *stubSource) Paginate(string, configuration.ConfigGroup, *sources.PaginationResponse) (*sources.PaginationResponse, error) {
 	return nil, nil
 }
