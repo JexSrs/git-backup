@@ -642,6 +642,65 @@ func TestGitea_LinkAsset_UploadsTheUrlAsATextAttachment(t *testing.T) {
 	}
 }
 
+func TestGitea_LinkAsset_EscapesAssetNamesWithSpaces(t *testing.T) {
+	var filename string
+	g, calls := newFakeGitea(t, false, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/releases/tags/1.4.2"):
+			respond(w, http.StatusOK, `{"id": 99, "name": "dav1d 1.4.2", "tag_name": "1.4.2"}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/repos/owner/my-repo/releases/99/assets":
+			_, header, err := r.FormFile("attachment")
+			if err != nil {
+				respond(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			filename = header.Filename
+			w.WriteHeader(http.StatusCreated)
+		default:
+			w.WriteHeader(http.StatusTeapot)
+		}
+	})
+
+	release := sources.SourceRelease{TagName: "1.4.2"}
+	name := "Dav1d 1.4.2 Source tarball"
+	if err := g.LinkAsset(giteaRepo(), release, name, "http://downloads.videolan.org/videolan/dav1d/1.4.2/dav1d-1.4.2.tar.xz"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	post := findCall(*calls, http.MethodPost, "/api/v1/repos/owner/my-repo/releases/99/assets")
+	if post == nil {
+		t.Fatalf("expected the asset to be posted to release 99, got %+v", *calls)
+	}
+	if got := post.Query.Get("name"); got != name+".txt" {
+		t.Errorf("expected the attachment name to survive the query string, got %q", got)
+	}
+	if filename != name+".txt" {
+		t.Errorf("expected the multipart filename to keep the spaces, got %q", filename)
+	}
+}
+
+func TestGitea_LinkAsset_ReportsRejectionWithStatusAndBody(t *testing.T) {
+	g, _ := newFakeGitea(t, false, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			respond(w, http.StatusOK, `{"id": 99, "name": "v1", "tag_name": "v1.0.0"}`)
+			return
+		}
+		respond(w, http.StatusBadRequest, `{"message":"invalid external url"}`)
+	})
+
+	err := g.LinkAsset(giteaRepo(), sources.SourceRelease{TagName: "v1.0.0"}, "app.zip", "u")
+	if err == nil {
+		t.Fatal("expected an error for a 400")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "400") || !strings.Contains(msg, "invalid external url") {
+		t.Errorf("expected the status and response body in the error, got %q", msg)
+	}
+	if strings.Contains(msg, "create release") {
+		t.Errorf("linking an asset must not be reported as creating a release, got %q", msg)
+	}
+}
+
 func TestGitea_LinkAsset_FailsWhenReleaseIsMissing(t *testing.T) {
 	g, calls := newFakeGitea(t, false, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)

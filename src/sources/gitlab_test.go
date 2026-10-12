@@ -194,6 +194,42 @@ func TestGitlab_FetchReleases_ReturnsOldestFirstWithAssets(t *testing.T) {
 	}
 }
 
+// GitLab's assets.count also counts the auto-generated source archives, which are not links.
+func TestGitlab_FetchReleases_IgnoresSourceArchivesInAssetCount(t *testing.T) {
+	const payload = `[
+  {"name": "dav1d 1.4.2", "tag_name": "1.4.2", "description": "", "created_at": "2024-05-01T00:00:00Z",
+   "assets": {
+     "count": 5,
+     "sources": [
+       {"format": "zip", "url": "https://code.videolan.org/videolan/dav1d/-/archive/1.4.2/dav1d-1.4.2.zip"},
+       {"format": "tar.gz", "url": "https://code.videolan.org/videolan/dav1d/-/archive/1.4.2/dav1d-1.4.2.tar.gz"},
+       {"format": "tar.bz2", "url": "https://code.videolan.org/videolan/dav1d/-/archive/1.4.2/dav1d-1.4.2.tar.bz2"},
+       {"format": "tar", "url": "https://code.videolan.org/videolan/dav1d/-/archive/1.4.2/dav1d-1.4.2.tar"}
+     ],
+     "links": [
+       {"id": 13, "name": "Dav1d 1.4.2 Source tarball", "url": "http://downloads.videolan.org/videolan/dav1d/1.4.2/dav1d-1.4.2.tar.xz",
+        "direct_asset_url": "http://downloads.videolan.org/videolan/dav1d/1.4.2/dav1d-1.4.2.tar.xz", "link_type": "package"}
+     ]
+   }}
+]`
+	g, _ := newGitlabSource(t, "tok", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(payload))
+	})
+
+	releases, err := g.FetchReleases("videolan", SourceRepository{ID: 55, Name: "dav1d"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(releases) != 1 {
+		t.Fatalf("expected one release, got %+v", releases)
+	}
+
+	want := []SourceAsset{{Name: "Dav1d 1.4.2 Source tarball", URL: "http://downloads.videolan.org/videolan/dav1d/1.4.2/dav1d-1.4.2.tar.xz"}}
+	if got := releases[0].Assets; !reflect.DeepEqual(got, want) {
+		t.Errorf("expected only the linked asset %+v, got %+v", want, got)
+	}
+}
+
 func TestGitlab_FetchReleases_ForbiddenMeansNoReleases(t *testing.T) {
 	g, _ := newGitlabSource(t, "tok", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusForbidden)

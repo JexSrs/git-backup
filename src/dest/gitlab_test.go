@@ -570,10 +570,14 @@ func TestGitLab_LinkAsset_CreatesAssetLink(t *testing.T) {
 	}
 
 	failing, _ := newFakeGitLab(t, func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusBadRequest)
+		respond(w, http.StatusBadRequest, `{"message":"Url is blocked"}`)
 	})
-	if err := failing.LinkAsset(gitlabRepo(), sources.SourceRelease{TagName: "v1.0.0"}, "app.zip", "u"); err == nil {
-		t.Error("expected an error for a 400")
+	err := failing.LinkAsset(gitlabRepo(), sources.SourceRelease{TagName: "v1.0.0"}, "app.zip", "u")
+	if err == nil {
+		t.Fatal("expected an error for a 400")
+	}
+	if msg := err.Error(); !strings.Contains(msg, "400") || !strings.Contains(msg, "Url is blocked") || strings.Contains(msg, "create release") {
+		t.Errorf("expected the link failure reported with status and body, got %q", msg)
 	}
 }
 

@@ -46,8 +46,9 @@ type GitlabRelease struct {
 	Assets      GitlabAssetParent `json:"assets"`
 }
 
+// GitlabAssetParent holds a release's linked assets. GitLab's assets.count also includes the
+// auto-generated source archives, so only the links are mapped to SourceAssets.
 type GitlabAssetParent struct {
-	Count int           `json:"count"`
 	Links []GitlabAsset `json:"links"`
 }
 
@@ -373,7 +374,7 @@ func (g *Gitlab) FetchReleases(username string, repo SourceRepository) ([]Source
 
 	releases := make([]SourceRelease, len(fetchedReleases))
 	for i, rel := range fetchedReleases {
-		assets := make([]SourceAsset, rel.Assets.Count)
+		assets := make([]SourceAsset, len(rel.Assets.Links))
 		for i, asset := range rel.Assets.Links {
 			assets[i] = SourceAsset{
 				Name: asset.Name,

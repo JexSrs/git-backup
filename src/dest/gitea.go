@@ -424,14 +424,17 @@ func (g *Gitea) LinkAsset(repo *Repository, release sources.SourceRelease, asset
 		return fmt.Errorf("close writer: %w", err)
 	}
 
-	_path := fmt.Sprintf("/api/v1/repos/%s/%s/releases/%d/assets?name=%s.txt", repo.ConfigGroup.GiteaUsername, repo.Name, gRelease.ID, assetName)
+	query := url.Values{}
+	query.Set("name", assetName+".txt")
+
+	_path := fmt.Sprintf("/api/v1/repos/%s/%s/releases/%d/assets?%s", repo.ConfigGroup.GiteaUsername, repo.Name, gRelease.ID, query.Encode())
 	body, err := g.request(http.MethodPost, _path, &buf, writer.FormDataContentType())
 	if err != nil {
 		return fmt.Errorf("creating request: %w", err)
 	}
 
 	if body.Status != http.StatusCreated {
-		return fmt.Errorf("create release: status %d", body.Status)
+		return fmt.Errorf("link asset: status %d %s", body.Status, body.Body)
 	}
 
 	return nil

@@ -376,7 +376,7 @@ func (g *GitLab) LinkAsset(repo *Repository, release sources.SourceRelease, asse
 	}
 
 	if body.Status != http.StatusCreated {
-		return fmt.Errorf("create release: status %d", body.Status)
+		return fmt.Errorf("link asset: status %d %s", body.Status, body.Body)
 	}
 
 	return nil
